@@ -15,8 +15,8 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
-// row is one line of phonikud output. The field names match the differential
-// corpus, so a JSON run can be diffed against testdata/corpus.jsonl directly.
+// row is one line of JSON output. The field names match the corpus, so a run can
+// be diffed against testdata/corpus.jsonl directly.
 type row struct {
 	Vocalized string `json:"vocalized"`
 	IPA       string `json:"ipa"`
@@ -26,10 +26,9 @@ type row struct {
 	Doubled   bool   `json:"doubled_vowel,omitempty"`
 }
 
-// newPhonikudCmd exposes everything below the diacritizer. That half of the
-// pipeline is pure string handling, so this needs no models and no ONNX Runtime
-// and answers instantly — which makes it the quick way to check a rule, and the
-// way to diff this port against the Python original a line at a time.
+// newPhonikudCmd exposes everything below the diacritizer. That half is pure string
+// handling, so this needs neither the models nor the ONNX Runtime and answers
+// instantly — the quick way to check a rule, and to diff against the Python original.
 func newPhonikudCmd() *cobra.Command {
 	var (
 		asJSON      bool
@@ -60,15 +59,18 @@ func newPhonikudCmd() *cobra.Command {
 				}
 				ipa := phonikud.Phonemize(vocalized)
 				rgIPA := rg.Transform(ipa, mode)
-				out := row{
+				if !asJSON {
+					writeRenderings(cmd.OutOrStdout(), vocalized, ipa, rgIPA)
+					return nil
+				}
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(row{
 					Vocalized: vocalized,
 					IPA:       ipa,
 					RG:        rgIPA,
 					HebRG:     heb.RG(vocalized),
 					Latin:     heb.Latin(rgIPA),
 					Doubled:   pipeline.DoubledVowel(ipa),
-				}
-				return write(cmd.OutOrStdout(), out, asJSON)
+				})
 			}
 
 			if len(args) > 0 {
@@ -96,18 +98,16 @@ func newPhonikudCmd() *cobra.Command {
 	return cmd
 }
 
-func write(w io.Writer, out row, asJSON bool) error {
-	if asJSON {
-		return json.NewEncoder(w).Encode(out)
-	}
-	fmt.Fprintf(w, "niqqud     %s\n", out.Vocalized)
-	fmt.Fprintf(w, "ipa        %s\n", out.IPA)
-	fmt.Fprintf(w, "rg ipa     %s\n", out.RG)
-	fmt.Fprintf(w, "rg         %s\n", heb.StripMarks(out.HebRG))
-	fmt.Fprintf(w, "rg niqqud  %s\n", out.HebRG)
-	fmt.Fprintf(w, "rg latin   %s\n", out.Latin)
-	if out.Doubled {
+// writeRenderings prints the block both `phonikud` and `say` show.
+func writeRenderings(w io.Writer, vocalized, ipa, rgIPA string) {
+	hebRG := heb.RG(vocalized)
+	fmt.Fprintf(w, "niqqud     %s\n", vocalized)
+	fmt.Fprintf(w, "ipa        %s\n", ipa)
+	fmt.Fprintf(w, "rg ipa     %s\n", rgIPA)
+	fmt.Fprintf(w, "rg         %s\n", heb.StripMarks(hebRG))
+	fmt.Fprintf(w, "rg niqqud  %s\n", hebRG)
+	fmt.Fprintf(w, "rg latin   %s\n", heb.Latin(rgIPA))
+	if pipeline.DoubledVowel(ipa) {
 		fmt.Fprintf(w, "warning    two identical adjacent vowels, which real Hebrew does not produce\n")
 	}
-	return nil
 }

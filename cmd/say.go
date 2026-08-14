@@ -7,13 +7,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/yardenshoham/rg-language/pkg/heb"
 	"github.com/yardenshoham/rg-language/pkg/pipeline"
 )
 
-// newSayCmd transforms one phrase and optionally writes the audio, so the whole
-// pipeline can be checked from a terminal — including by ear, which is the only
-// instrument that has ever worked on this project.
+// newSayCmd transforms one phrase and optionally writes the audio, so the pipeline
+// can be checked from a terminal — including by ear, the only instrument that has
+// ever worked here.
 func newSayCmd() *cobra.Command {
 	var out string
 
@@ -36,15 +35,7 @@ func newSayCmd() *cobra.Command {
 
 			w := cmd.OutOrStdout()
 			fmt.Fprintf(w, "input      %s\n", result.Input)
-			fmt.Fprintf(w, "niqqud     %s\n", result.Vocalized)
-			fmt.Fprintf(w, "ipa        %s\n", result.IPA)
-			fmt.Fprintf(w, "rg ipa     %s\n", result.RGIPA)
-			fmt.Fprintf(w, "rg         %s\n", heb.StripMarks(heb.RG(result.Vocalized)))
-			fmt.Fprintf(w, "rg niqqud  %s\n", heb.RG(result.Vocalized))
-			fmt.Fprintf(w, "rg latin   %s\n", heb.Latin(result.RGIPA))
-			if pipeline.DoubledVowel(result.IPA) {
-				fmt.Fprintf(w, "warning    two identical adjacent vowels, which real Hebrew does not produce\n")
-			}
+			writeRenderings(w, result.Vocalized, result.IPA, result.RGIPA)
 			if out == "" {
 				return nil
 			}

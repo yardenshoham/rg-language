@@ -28,28 +28,23 @@ func About() g.Node {
 
 		html.H2(g.Text("קרדיטים")),
 		html.Ul(
+			credit("https://github.com/thewh1teagle/phonikud", "phonikud", " — ניקוד אוטומטי והמרה לצלילים."),
+			credit("https://github.com/rhasspy/piper", "Piper", " — סינתזת הדיבור."),
+			credit("https://fonts.google.com/noto/specimen/Noto+Sans+Hebrew", "Noto Sans Hebrew",
+				" — הגופן, כי ניקוד צריך גופן שיודע להציב אותו."),
 			html.Li(
-				html.A(g.Attr("href", "https://github.com/thewh1teagle/phonikud"), g.Text("phonikud")),
-				g.Text(" — ניקוד אוטומטי והמרה לצלילים."),
-			),
-			html.Li(
-				html.A(g.Attr("href", "https://github.com/rhasspy/piper"), g.Text("Piper")),
-				g.Text(" — סינתזת הדיבור."),
-			),
-			html.Li(
-				html.A(g.Attr("href", "https://fonts.google.com/noto/specimen/Noto+Sans+Hebrew"), g.Text("Noto Sans Hebrew")),
-				g.Text(" — הגופן, כי ניקוד צריך גופן שיודע להציב אותו."),
-			),
-			html.Li(
-				html.A(g.Attr("href", "https://www.gomponents.com"), g.Text("gomponents")),
+				html.A(html.Href("https://www.gomponents.com"), g.Text("gomponents")),
 				g.Text(" ו־"),
-				html.A(g.Attr("href", "https://htmx.org"), g.Text("htmx")),
+				html.A(html.Href("https://htmx.org"), g.Text("htmx")),
 				g.Text(" — הדפים."),
 			),
 		),
-		html.P(
-			html.A(g.Attr("href", "https://github.com/yardenshoham/rg-language"),
-				g.Text("github.com/yardenshoham/rg-language")),
-		),
+		html.P(html.A(html.Href("https://github.com/yardenshoham/rg-language"),
+			g.Text("github.com/yardenshoham/rg-language"))),
 	)
+}
+
+// credit is one row of the credits list: a link, then what it gave the project.
+func credit(href, name, rest string) g.Node {
+	return html.Li(html.A(html.Href(href), g.Text(name)), g.Text(rest))
 }

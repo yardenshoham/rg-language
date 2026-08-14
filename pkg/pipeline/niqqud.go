@@ -5,26 +5,25 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+
+	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
 //go:embed lexicon.json
 var lexiconJSON []byte
 
-// Marks phonikud recognises: standard niqqud, ole, masora, the prefix bar and
-// the geresh.
+// Marks phonikud recognises: niqqud, ole, masora, the prefix bar, the geresh.
 const markClass = `\x{05ab}\x{05af}\x{05b0}-\x{05c7}|'`
 
 var (
-	// clusterPattern walks the text one character at a time, gathering the marks
-	// stacked on each.
+	// Each character as group 1, the marks stacked on it as group 2.
 	clusterPattern = regexp.MustCompile(`(?s)(.)([` + markClass + `]*)`)
 	markPattern    = regexp.MustCompile(`[` + markClass + `]`)
 
 	// lexicon pins the niqqud of words the diacritizer gets wrong. Overriding at
-	// the niqqud level rather than at the IPA level means the phonemes, the RG
-	// transform and the Hebrew rendering all stay on the normal path. It is baked
-	// into the binary and changed by redeploying — this is the intended fix for
-	// every future diacritizer error.
+	// the niqqud level, not the IPA level, keeps the phonemes, the transform and
+	// the Hebrew rendering on the normal path. This is the intended fix for every
+	// future diacritizer error; it is baked in and changed by redeploying.
 	lexicon = func() map[string]string {
 		var entries map[string]string
 		if err := json.Unmarshal(lexiconJSON, &entries); err != nil {
@@ -43,50 +42,39 @@ const (
 
 func isHebrewLetter(r rune) bool { return r >= 'א' && r <= 'ת' }
 
-// NormalizeNiqqud repairs a diacritizer artifact that makes a single vowel count
-// twice.
+// NormalizeNiqqud repairs a diacritizer artifact that counts one vowel twice.
 //
-// phonikud reads ו+dagesh as shuruk /u/ and ו+holam as holam male /o/ — the vav
-// itself carries the vowel. When the diacritizer also puts a qubuts or holam on
-// the consonant before it, that vowel is emitted twice:
-//
-//	ערוגה -> ʔaʁuuɡa   (a qubuts on the resh, then a vav with a dagesh)
-//	אורז  -> ʔooʁez    (a holam on the alef, then a vav with a holam)
-//
-// The vav's own mark is the correct one, so the redundant mark is dropped from
-// the preceding consonant. That also restores the standard spelling.
+// phonikud reads ו+dagesh as shuruk /u/ and ו+holam as holam male /o/, so the vav
+// carries the vowel. When the diacritizer also marks the consonant before it, the
+// vowel is emitted twice: ערוגה -> ʔaʁuuɡa, אורז -> ʔooʁez. The vav's mark is the
+// correct one, so the redundant one is dropped — restoring the standard spelling.
 func NormalizeNiqqud(vocalized string) string {
-	type unit struct{ char, marks string }
-	matches := clusterPattern.FindAllStringSubmatch(vocalized, -1)
-	units := make([]unit, 0, len(matches))
-	for _, m := range matches {
-		units = append(units, unit{char: m[1], marks: m[2]})
-	}
+	clusters := clusterPattern.FindAllStringSubmatch(vocalized, -1)
 
-	for i := range len(units) - 1 {
-		cur, next := units[i], units[i+1]
-		if next.char != "ו" || cur.char == "ו" {
+	for i := range len(clusters) - 1 {
+		cur, next := clusters[i], clusters[i+1]
+		if next[1] != "ו" || cur[1] == "ו" {
 			continue
 		}
-		if runes := []rune(cur.char); len(runes) != 1 || !isHebrewLetter(runes[0]) {
+		if runes := []rune(cur[1]); len(runes) != 1 || !isHebrewLetter(runes[0]) {
 			continue
 		}
 		// Does the vav carry its own vowel — shuruk or holam male?
-		if !strings.ContainsAny(next.marks, string([]rune{dagesh, holam, vavHolam})) {
+		if !strings.ContainsAny(next[2], string([]rune{dagesh, holam, vavHolam})) {
 			continue
 		}
 		for _, duplicate := range []rune{qubuts, holam} {
-			if at := strings.IndexRune(cur.marks, duplicate); at >= 0 {
-				units[i].marks = cur.marks[:at] + cur.marks[at+len(string(duplicate)):]
+			if at := strings.IndexRune(cur[2], duplicate); at >= 0 {
+				clusters[i][2] = cur[2][:at] + cur[2][at+len(string(duplicate)):]
 				break
 			}
 		}
 	}
 
 	var b strings.Builder
-	for _, u := range units {
-		b.WriteString(u.char)
-		b.WriteString(u.marks)
+	for _, c := range clusters {
+		b.WriteString(c[1])
+		b.WriteString(c[2])
 	}
 	return b.String()
 }
@@ -102,13 +90,13 @@ func ApplyLexicon(vocalized string) string {
 	return strings.Join(words, " ")
 }
 
-// DoubledVowel reports whether the IPA contains two identical adjacent vowels,
-// which real Hebrew essentially never produces. It is the detector for the bug
-// NormalizeNiqqud repairs: run it over any new vocabulary.
+// DoubledVowel reports two identical adjacent vowels, which real Hebrew essentially
+// never produces — the hedge matters, since the corpus test pins three legitimate
+// hits. The detector for the bug NormalizeNiqqud repairs: run it over new vocabulary.
 func DoubledVowel(ipa string) bool {
 	var prev rune
 	for _, r := range ipa {
-		if r == prev && strings.ContainsRune("aeiou", r) {
+		if r == prev && rg.IsVowel(r) {
 			return true
 		}
 		prev = r

@@ -7,8 +7,7 @@ import (
 	"testing"
 )
 
-// testVoice builds a Voice with the embedded config but no session, which is
-// enough for everything that does not run the model.
+// testVoice builds a Voice with the embedded config but no session.
 func testVoice(t *testing.T) *Voice {
 	t.Helper()
 	v := &Voice{}
@@ -18,9 +17,8 @@ func testVoice(t *testing.T) *Voice {
 	return v
 }
 
-// The id sequences the Python implementation produces for the same phonemes,
-// including the " ." tail Synth appends. These are what proved the Go port and
-// the original agree at the level the model actually sees.
+// The id sequences the Python implementation produces for the same phonemes, tail
+// included. These proved the port and the original agree at the model's level.
 func TestPhonemeIDs(t *testing.T) {
 	t.Parallel()
 	v := testVoice(t)
@@ -45,8 +43,7 @@ func TestPhonemeIDs(t *testing.T) {
 	}
 }
 
-// Phonemes the checkpoint has never seen must be dropped, not turned into an
-// arbitrary id.
+// Unknown phonemes must be dropped, not given an arbitrary id.
 func TestPhonemeIDsSkipsUnknown(t *testing.T) {
 	t.Parallel()
 	v := testVoice(t)
@@ -58,8 +55,8 @@ func TestPhonemeIDsSkipsUnknown(t *testing.T) {
 
 func TestSampleRate(t *testing.T) {
 	t.Parallel()
-	if got := testVoice(t).SampleRate(); got != 22050 {
-		t.Errorf("SampleRate() = %d, want 22050", got)
+	if got := testVoice(t).cfg.Audio.SampleRate; got != 22050 {
+		t.Errorf("sample rate = %d, want 22050", got)
 	}
 }
 

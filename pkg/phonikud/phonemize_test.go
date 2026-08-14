@@ -6,22 +6,19 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/phonikud"
 )
 
-// The end-of-word trims, which are the part of the transducer the corpus cannot
-// reach: the corpus is diacritizer output, and these fire on words the
-// diacritizer left bare.
+// The end-of-word trims, the part the corpus cannot reach: it is diacritizer
+// output, and these fire on words the diacritizer left bare.
 func TestPhonemizeTrimsWordEndings(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name, in, want string
 	}{
-		// Two h's: the first trim leaves "ˈh", and the second has to take the
-		// stray stress mark with it. Dropping this rule as redundant leaves a
-		// phantom consonant behind.
+		// Two h's: the first trim leaves "ˈh" and the second takes the stray stress
+		// with it. Dropping it as redundant leaves a phantom consonant.
 		{"double he", "זהה", "z"},
 		{"double he, taf", "תהה", "t"},
 		{"double he with a yod", "תהיה", "t"},
-		// One h is trimmed on its own, and the stress mark is left behind — which
-		// is exactly the state the double-h case has to clean up.
+		// One h trims alone and leaves the stress — the state above cleans up.
 		{"single he", "גה", "ɡˈ"},
 		{"two he", "הה", "hˈ"},
 		{"three he", "ההה", "h"},

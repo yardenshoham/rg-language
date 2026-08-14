@@ -8,11 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type versionInfo struct {
-	Version   string
-	GoVersion string
-}
-
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "version",
@@ -24,10 +19,10 @@ func newVersionCmd() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("failed to read build info")
 			}
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(versionInfo{
-				Version:   info.Main.Version,
-				GoVersion: info.GoVersion,
-			})
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
+				Version   string
+				GoVersion string
+			}{Version: info.Main.Version, GoVersion: info.GoVersion})
 		},
 	}
 }

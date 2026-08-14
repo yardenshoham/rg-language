@@ -18,8 +18,8 @@ func TestRGReference(t *testing.T) {
 		{"הַיּוֹם יוֹם שְׁלִישִׁי", "הרגיורגום יורגום שלירגישירגי"},
 		{"גַּנָּן", "גרגנרגן"},
 		{"נֶחְמָד", "נרגחמרגד"},
-		// פירגיצרגה, not פירגצרגה: the spelling policy writes the mater yod in
-		// the copied vowel, which makes the i unambiguous to read.
+		// פירגיצרגה, not פירגצרגה: the copied vowel keeps the mater yod, which
+		// makes the i unambiguous.
 		{"אֲנִי מַמָּשׁ אוֹהֵב פִּיצָה", "ארגנירגי מרגמרגש אורגוהרגב פירגיצרגה"},
 	}
 	for _, tt := range tests {
@@ -51,6 +51,8 @@ func TestRGVocalized(t *testing.T) {
 	}
 }
 
+// Concatenating the non-inserted runs must give the input back, rune for rune:
+// this is the guard against segment splitting corrupting multi-byte text.
 func TestRGSegments(t *testing.T) {
 	t.Parallel()
 	segs := heb.RGSegments("שָׁלוֹם")

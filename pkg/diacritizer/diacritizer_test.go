@@ -1,14 +1,15 @@
 package diacritizer
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yardenshoham/rg-language/internal/corpustest"
 )
 
-// Chunking must never lose or duplicate text, and never hand the model more than
-// it can hold. These shapes are the ones that break naive splitters.
+// Chunking must never lose or duplicate text, nor exceed the window. These shapes
+// are the ones that break naive splitters.
 func TestChunks(t *testing.T) {
 	t.Parallel()
 	tests := []struct{ name, text string }{
@@ -40,9 +41,8 @@ func TestChunks(t *testing.T) {
 	}
 }
 
-// The normalizer strips combining marks without decomposing first, so a
-// precomposed letter keeps its accent and then falls outside the model's
-// alphabet. Getting this backwards silently changes the model's predictions.
+// Marks are stripped without decomposing first, so a precomposed letter keeps its
+// accent and leaves the alphabet. Reversing this silently changes predictions.
 func TestFold(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -73,9 +73,8 @@ func TestFold(t *testing.T) {
 	}
 }
 
-// On Hebrew the tokens are exactly one per rune, which is what makes the
-// reassembly a simple walk. Anything the model cannot represent collapses into a
-// single unknown token so that the positions stay put.
+// On Hebrew the tokens are one per rune, which is what makes the reassembly simple.
+// Anything unrepresentable collapses into one token so positions stay put.
 func TestTokenize(t *testing.T) {
 	t.Parallel()
 	d := &Diacritizer{vocab: map[rune]int64{'ש': 234, 'ל': 221, 'ו': 214, 'ם': 225},
@@ -104,18 +103,12 @@ func TestTokenize(t *testing.T) {
 	}
 }
 
-// Whatever the model decides about the marks, every character of the input must
-// come back exactly once when the niqqud is stripped again. This is the guard
-// against the reassembly walk losing or duplicating text around the tokens that
-// are not one-per-rune: unknown runs, and characters the normalizer deletes.
-//
-// It needs the model, so it skips when the checkpoints are not present.
+// Whatever the model decides, stripping the niqqud again must return every input
+// character exactly once — the guard against the reassembly losing or duplicating
+// text around tokens that are not one-per-rune. Needs the model, so it can skip.
 func TestReassemblyRoundTrip(t *testing.T) {
 	t.Parallel()
-	dir := os.Getenv("RG_MODELS_DIR")
-	if dir == "" {
-		dir = "/models"
-	}
+	dir := corpustest.ModelsDir()
 	d, err := New(t.Context(), filepath.Join(dir, "phonikud-1.0.onnx"))
 	if err != nil {
 		t.Skipf("no diacritizer in %s, set RG_MODELS_DIR: %v", dir, err)

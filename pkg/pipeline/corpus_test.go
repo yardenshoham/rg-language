@@ -1,74 +1,32 @@
 package pipeline_test
 
 import (
-	"bufio"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/yardenshoham/rg-language/internal/corpustest"
 	"github.com/yardenshoham/rg-language/pkg/diacritizer"
 	"github.com/yardenshoham/rg-language/pkg/pipeline"
 )
 
-// The corpus lives with the transducer it mostly exists to pin. This test needs
-// it too, for the one stage the transducer cannot check: the model.
+// The corpus lives with the transducer it exists to pin; this test needs it for the
+// one stage the transducer cannot check.
 const corpusPath = "../phonikud/testdata/corpus.jsonl"
 
-// The diacritizer is a 300 MB model and 5,012 items take minutes, so by default
-// this walks a deterministic sample. Set RG_FULL_CORPUS=1 to check all of them.
+// 5,012 items through a 300 MB model take minutes, so this walks a deterministic
+// sample by default. RG_FULL_CORPUS=1 checks all of them.
 const sampleSize = 200
 
-type item struct {
-	Text      string `json:"text"`
-	Raw       string `json:"raw"`
-	Vocalized string `json:"vocalized"`
-}
-
-func loadCorpus(t *testing.T) []item {
-	t.Helper()
-	f, err := os.Open(corpusPath)
-	if err != nil {
-		t.Fatalf("opening corpus: %v", err)
-	}
-	defer f.Close()
-
-	var items []item
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		var i item
-		if err := json.Unmarshal(scanner.Bytes(), &i); err != nil {
-			t.Fatalf("decoding corpus: %v", err)
-		}
-		items = append(items, i)
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("reading corpus: %v", err)
-	}
-	return items
-}
-
-// modelsDir finds the checkpoints, or skips: they are not in the repo.
-func modelsDir(t *testing.T) string {
-	t.Helper()
-	dir := os.Getenv("RG_MODELS_DIR")
-	if dir == "" {
-		dir = "/models"
-	}
+// TestDiacritizerCorpus covers the one stage the transducer's own test cannot,
+// because it runs a model. Argmax over identical token ids is stable, so this is
+// still exact: a mismatch means the tokenizer or reassembly is wrong, not weights.
+func TestDiacritizerCorpus(t *testing.T) {
+	t.Parallel()
+	dir := corpustest.ModelsDir()
 	if _, err := os.Stat(filepath.Join(dir, pipeline.DiacritizerModel)); err != nil {
 		t.Skipf("no diacritizer in %s, set RG_MODELS_DIR: %v", dir, err)
 	}
-	return dir
-}
-
-// TestDiacritizerCorpus is the one stage the transducer's own corpus test cannot
-// cover, because it runs a model. Given identical token ids the argmax outputs
-// are stable, so this is still an exact comparison — a mismatch means the
-// tokenizer or the reassembly is wrong, not the weights.
-func TestDiacritizerCorpus(t *testing.T) {
-	t.Parallel()
-	dir := modelsDir(t)
 
 	d, err := diacritizer.New(t.Context(), filepath.Join(dir, pipeline.DiacritizerModel))
 	if err != nil {
@@ -80,7 +38,7 @@ func TestDiacritizerCorpus(t *testing.T) {
 		}
 	})
 
-	items := loadCorpus(t)
+	items := corpustest.Load(t, corpusPath)
 	step := 1
 	if os.Getenv("RG_FULL_CORPUS") == "" {
 		step = max(1, len(items)/sampleSize)
@@ -138,49 +96,33 @@ func TestDoubledVowel(t *testing.T) {
 	}
 }
 
-// knownDoubledVowels are the corpus items the detector flags after
-// NormalizeNiqqud has already run. All three are diacritizer artifacts of a
-// different shape from the vav one — a vocal shva next to a segol, and the
-// letters of an embedded "WiFi" falling through — so there is nothing here to
-// repair. The test pins the count: a new one means new vocabulary needs looking at.
+// knownDoubledVowels are the items still flagged after NormalizeNiqqud. All three
+// are artifacts of a different shape from the vav one — a vocal shva beside a
+// segol, and an embedded "WiFi" falling through — so there is nothing to repair.
+// The count is pinned: a new one means new vocabulary to look at.
 var knownDoubledVowels = map[string]bool{
 	"איפה אני יכול למצוא רשת WiFi פתוחה ?": true,
 	"היא חבקה את התינוק לחזה.":             true,
 	"לך באיטיות, ואני אדביק אותך.":         true,
 }
 
-// TestCorpusDoubledVowels runs the detector over the whole corpus. It needs no
-// models: the IPA is recorded.
+// The detector over the whole corpus. Needs no models: the IPA is recorded.
 func TestCorpusDoubledVowels(t *testing.T) {
 	t.Parallel()
-	f, err := os.Open(corpusPath)
-	if err != nil {
-		t.Fatalf("opening corpus: %v", err)
-	}
-	defer f.Close()
+	items := corpustest.Load(t, corpusPath)
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	total, flagged := 0, 0
-	for scanner.Scan() {
-		var row struct {
-			Text string `json:"text"`
-			IPA  string `json:"ipa"`
-		}
-		if err := json.Unmarshal(scanner.Bytes(), &row); err != nil {
-			t.Fatalf("decoding corpus: %v", err)
-		}
-		total++
-		if !pipeline.DoubledVowel(row.IPA) {
+	flagged := 0
+	for _, item := range items {
+		if !pipeline.DoubledVowel(item.IPA) {
 			continue
 		}
 		flagged++
-		if !knownDoubledVowels[row.Text] {
-			t.Errorf("new doubled vowel in %q: %q", row.Text, row.IPA)
+		if !knownDoubledVowels[item.Text] {
+			t.Errorf("new doubled vowel in %q: %q", item.Text, item.IPA)
 		}
 	}
 	if flagged != len(knownDoubledVowels) {
 		t.Errorf("%d of %d items flagged, want the %d known ones",
-			flagged, total, len(knownDoubledVowels))
+			flagged, len(items), len(knownDoubledVowels))
 	}
 }

@@ -1,9 +1,9 @@
 // Package voice turns IPA phonemes into speech with a Piper VITS checkpoint.
 //
-// The voice is fed phonemes, never text. RG output is nonsense words, and any
-// engine that runs its own text-to-phoneme conversion would "correct" them —
-// which is why exact syllable reproduction is achievable at all. Any future
-// voice that cannot accept IPA directly is disqualified.
+// It is fed phonemes, never text: RG output is nonsense words, and any engine
+// doing its own text-to-phoneme conversion would "correct" them — which is why
+// exact syllable reproduction is achievable at all. Any future voice that cannot
+// accept IPA directly is disqualified.
 package voice
 
 import (
@@ -22,35 +22,30 @@ import (
 //go:embed model.config.json
 var configJSON []byte
 
-// Synthesis parameters. These are not the checkpoint's own defaults, and the
-// difference was tested rather than assumed: a blind, order-balanced A/B against
-// the defaults came out a dead tie (4 "no difference", 2 each way). They are
-// kept because they are the configuration all 15 passing human verdicts were
-// collected under. Changing them requires a new listening round — there is no
-// automated substitute.
+// Synthesis parameters, not the checkpoint's defaults. A blind order-balanced A/B
+// against the defaults was a dead tie (4 "no difference", 2 each way); these are
+// kept because all 15 passing human verdicts were collected under them. Changing
+// them needs a new listening round — there is no automated substitute.
 const (
 	noiseScale  = 0.640
 	lengthScale = 1.20
 	noiseW      = 1.0
 )
 
-// Fingerprint identifies the synthesis settings above, so that content-addressed
-// audio URLs change if they ever do.
+// Fingerprint identifies the settings above, so audio URLs change if they do.
 const Fingerprint = "n0.640-l1.20-w1.0-tail120"
 
-// Appended to every phoneme string before synthesis. Measured effect: residual
-// energy in the clip's final 25 ms frame dropped 61% across a 21-word battery,
-// i.e. the model stopped ending clips mid-sound, and two human verdicts flipped
-// from bad to ok. It does not fix unreleased word-final stops — nothing does,
-// with the voices available. The trailing silence guards against players
-// clipping the last samples.
+// Appended to every phoneme string before synthesis. Measured: residual energy in
+// the final 25 ms frame dropped 61% over a 21-word battery — the model stopped
+// ending clips mid-sound — and two human verdicts flipped from bad to ok. It does
+// not fix unreleased word-final stops; nothing available does. The trailing
+// silence guards against players clipping the last samples.
 const (
 	tailPhonemes  = " ."
 	tailSilenceMS = 120
 )
 
-// Piper's symbol conventions: begin, end, and the pad inserted between every
-// phoneme.
+// Piper's symbols: begin, end, and the pad inserted between every phoneme.
 const (
 	bos = "^"
 	eos = "$"
@@ -95,12 +90,8 @@ func New(ctx context.Context, modelPath string) (*Voice, error) {
 // Close releases the model.
 func (v *Voice) Close() error { return v.session.Destroy() }
 
-// SampleRate is the rate of the audio Synth returns, in Hz.
-func (v *Voice) SampleRate() int { return v.cfg.Audio.SampleRate }
-
-// phonemeIDs maps IPA to the model's symbol ids: begin, then each phoneme
-// followed by a pad, then end. Phonemes the checkpoint does not know are
-// dropped. It iterates runes — every IPA symbol here is multi-byte.
+// phonemeIDs maps IPA to symbol ids: begin, each phoneme then a pad, end. Unknown
+// phonemes are dropped. Iterates runes — every IPA symbol here is multi-byte.
 func (v *Voice) phonemeIDs(ipa string) []int64 {
 	ids := make([]int64, 0, 2*len([]rune(ipa))+2)
 	for _, r := range bos + ipa {
@@ -114,11 +105,9 @@ func (v *Voice) phonemeIDs(ipa string) []int64 {
 	return append(ids, v.cfg.PhonemeIDMap[eos]...)
 }
 
-// Synth renders IPA phonemes as a mono 16-bit WAV.
-//
-// Piper is stochastic — the graph contains a RandomNormalLike node — so the same
-// input gives slightly different audio every time. Callers that want a phrase to
-// sound the same twice have to cache the result.
+// Synth renders IPA phonemes as a mono 16-bit WAV. Piper is stochastic — the graph
+// has a RandomNormalLike node — so callers wanting a phrase to sound the same
+// twice must cache the result.
 func (v *Voice) Synth(ipa string) ([]byte, error) {
 	ids := v.phonemeIDs(ipa + tailPhonemes)
 
@@ -134,8 +123,7 @@ func (v *Voice) Synth(ipa string) ([]byte, error) {
 	}
 	defer onnx.Destroy(lengths)
 
-	// Note the order: the model wants noise, length, noise_w — not the order the
-	// parameters are usually written in prose.
+	// The model wants noise, length, noise_w — not the usual prose order.
 	scales, err := ort.NewTensor(ort.NewShape(3), []float32{noiseScale, lengthScale, noiseW})
 	if err != nil {
 		return nil, fmt.Errorf("building scales tensor: %w", err)
@@ -152,7 +140,7 @@ func (v *Voice) Synth(ipa string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("voice returned %T, want a float32 tensor", outputs[0])
 	}
-	return wav(samples.GetData(), v.SampleRate()), nil
+	return wav(samples.GetData(), v.cfg.Audio.SampleRate), nil
 }
 
 // wav encodes float samples as a mono 16-bit PCM WAV, clipped to [-1, 1].
