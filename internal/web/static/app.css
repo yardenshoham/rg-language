@@ -1,0 +1,207 @@
+/* Noto Sans Hebrew, subset to the Hebrew block and served locally. Real 400 and
+   600 weights: a browser's faux bold smears the niqqud, and the niqqud is the
+   whole point of the pronunciation view. */
+@font-face {
+  font-family: "Noto Sans Hebrew";
+  src: url("/static/fonts/noto-sans-hebrew-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Sans Hebrew";
+  src: url("/static/fonts/noto-sans-hebrew-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  /* Lets the native form controls and the audio player follow the theme too. */
+  color-scheme: light dark;
+
+  --bg: #fbf9f5;
+  --fg: #1c1a17;
+  --muted: #6b655c;
+  --accent: #b4451f;
+  --line: #e2ddd3;
+  --card: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16150f;
+    --fg: #ece7dc;
+    --muted: #9a9285;
+    --accent: #f0895c;
+    --line: #302d25;
+    --card: #1e1c15;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 4rem;
+  max-width: 44rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Noto Sans Hebrew", system-ui, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+header a {
+  text-decoration: none;
+  color: inherit;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+  margin: 0.35rem 0 2rem;
+  font-size: 0.95rem;
+}
+
+nav a[aria-current] {
+  font-weight: 600;
+  text-decoration-thickness: 2px;
+}
+
+a {
+  color: var(--accent);
+}
+
+.lead {
+  margin-top: 0;
+  color: var(--muted);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-size: 1.25rem;
+  resize: vertical;
+}
+
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  align-self: flex-start;
+  padding: 0.5rem 1.4rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.examples {
+  margin: 0.75rem 0 2rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.examples a {
+  margin-inline-start: 0.75rem;
+  white-space: nowrap;
+}
+
+.view {
+  margin: 0 0 1.75rem;
+  padding-inline-start: 0.9rem;
+  border-inline-start: 3px solid var(--line);
+}
+
+.view p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The unvocalized rendering is the headline: it is how people actually write RG. */
+.view.plain p {
+  font-size: clamp(1.5rem, 5.5vw, 2.2rem);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* Niqqud needs room above and below the letters, or the marks collide. */
+.view.vocalized p {
+  font-size: clamp(1.3rem, 4.5vw, 1.8rem);
+  line-height: 2.1;
+}
+
+.view.latin p {
+  font-family: system-ui, sans-serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+}
+
+.inserted {
+  color: var(--accent);
+}
+
+.stressed {
+  font-weight: 600;
+}
+
+.player {
+  margin-top: 1.5rem;
+}
+
+audio {
+  width: 100%;
+  max-width: 22rem;
+}
+
+/* htmx sets this while a request is in flight. */
+#result.htmx-request {
+  opacity: 0.45;
+  transition: opacity 120ms ease-in;
+}
+
+footer {
+  margin-top: 3.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+ul {
+  padding-inline-start: 1.25rem;
+}

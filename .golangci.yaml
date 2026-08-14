@@ -1,0 +1,15 @@
+version: "2"
+linters:
+  enable:
+    - forbidigo
+    - godot
+    - paralleltest
+    - revive
+    - testifylint
+    - errcheck
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    paths:
+      - "^debug/"

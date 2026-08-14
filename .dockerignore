@@ -1,0 +1,5 @@
+.git/
+debug/
+dist/
+rg-language
+e2e/

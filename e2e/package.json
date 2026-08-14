@@ -1,0 +1,14 @@
+{
+  "name": "rg-language-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Browser tests for the site. Development only — the site itself ships no JavaScript build.",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report",
+    "shot": "node shot.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}
