@@ -11,8 +11,7 @@ import (
 	"github.com/yardenshoham/rg-language/internal/web"
 )
 
-// get serves path from a server with no models loaded. Every route exercised
-// here is one that does not need them, which is most of the site.
+// get serves path with no models loaded — most of the site needs none.
 func get(t *testing.T, path string) *http.Response {
 	t.Helper()
 	srv := httptest.NewServer(web.NewServer(slog.New(slog.DiscardHandler), nil))
@@ -50,8 +49,7 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-// Hebrew renders as mojibake unless the charset is declared in both the header
-// and the document, so both are asserted.
+// Hebrew is mojibake unless the charset is in both header and document.
 func TestHomeIsUTF8Hebrew(t *testing.T) {
 	t.Parallel()
 	resp := get(t, "/")
@@ -72,8 +70,8 @@ func TestHomeIsUTF8Hebrew(t *testing.T) {
 	}
 }
 
-// Emptying the textarea makes htmx ask for an empty transform. It has to get an
-// empty fragment back, not an error, or the stale result stays on screen.
+// Emptying the textarea asks for an empty transform, which must come back as an
+// empty fragment, not an error, or the stale result stays on screen.
 func TestEmptyTransformClearsTheResult(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"/transform?text=", "/transform", "/transform?text=%20%20"} {
@@ -108,8 +106,8 @@ func TestAbout(t *testing.T) {
 	}
 }
 
-// The font and htmx are served from the binary: a CDN would be one more thing to
-// go wrong, and Hebrew needs a font with real mark positioning.
+// Served from the binary: a CDN is one more thing to break, and Hebrew needs a
+// font with real mark positioning.
 func TestStaticAssets(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{

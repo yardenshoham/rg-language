@@ -4,14 +4,14 @@ package phonikud
 // phonikud's lexicon.py.
 //
 // Combining marks are written as \u escapes throughout this package: as literal
-// characters they attach themselves to whatever precedes them in the source and
-// become impossible to read or edit reliably.
+// characters they attach to whatever precedes them in the source and become
+// impossible to edit reliably.
 //
 // Reference:
 // https://en.wikipedia.org/wiki/Unicode_and_HTML_for_the_Hebrew_alphabet#Compact_table
 
-// Diacritics phonikud adds on top of standard niqqud. The diacritizer emits the
-// first three; masora and the geresh come from the text.
+// phonikud's extra diacritics. The diacritizer emits the first three; masora and
+// the geresh come from the text.
 const (
 	vocalShvaDiacritic  = '\u05bd' // meteg
 	hatamaDiacritic     = '\u05ab' // ole
@@ -40,8 +40,8 @@ const (
 	sin         = '\u05c2'
 )
 
-// hePatternText matches a run of Hebrew: standard niqqud and letters, ole,
-// meteg, masora, the prefix bar, the en geresh and a double quote.
+// hePatternText matches a run of Hebrew: niqqud and letters, ole, meteg, masora,
+// the prefix bar, the en geresh and a double quote.
 const hePatternText = "[\u05b0-ת\u05bd\u05ab|\u05af'\"]+"
 
 // gereshPhonemes are the sounds a geresh adds to a letter.
@@ -49,8 +49,8 @@ var gereshPhonemes = map[string]string{
 	"ג": "dʒ", "ז": "ʒ", "ת": "ta", "צ": "tʃ", "ץ": "tʃ",
 }
 
-// lettersPhonemes maps each consonant — and the beged-kefet and shin/sin pairs,
-// which are keyed by letter plus their mark — to its sound.
+// lettersPhonemes maps each consonant to its sound. Beged-kefet and shin/sin are
+// keyed by letter plus mark.
 var lettersPhonemes = map[string]string{
 	"א": "ʔ",  // Alef
 	"ב": "v",  // Bet
@@ -108,15 +108,14 @@ var nikudPhonemes = map[rune]string{
 	vocalShvaDiacritic: "e",
 }
 
-// isEnhancedDiacritic reports whether a mark carries meaning for the transducer
-// without being part of the letter's own vowel. Letter.diac excludes these.
+// isEnhancedDiacritic reports a mark meaningful to the transducer but not part of
+// the letter's vowel. letter.diac excludes these.
 func isEnhancedDiacritic(r rune) bool {
 	return r == hatamaDiacritic || r == prefixDiacritic || r == vocalShvaDiacritic
 }
 
-// setPhonemes is every single character that may appear in the output, derived
-// from the value tables above exactly as phonikud derives it. Anything else —
-// Hebrew letters, digits, quotes — is dropped from the result.
+// setPhonemes is every character that may appear in the output, derived from the
+// tables above exactly as phonikud derives it. Anything else is dropped.
 var setPhonemes = func() map[rune]bool {
 	set := map[rune]bool{}
 	add := func(s string) {

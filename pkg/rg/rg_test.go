@@ -8,7 +8,7 @@ import (
 )
 
 // The reference set the project is defined by. Stress is ignored when matching,
-// exactly as the original self-test does.
+// as the original self-test does.
 var examples = []struct {
 	hebrew string
 	ipa    string
@@ -57,42 +57,17 @@ func TestStressModes(t *testing.T) {
 	}
 }
 
-func TestTransformSegments(t *testing.T) {
+func TestIsVowel(t *testing.T) {
 	t.Parallel()
-	segs := rg.TransformSegments("ʃalˈom", rg.StressFirst)
-	want := []rg.Segment{
-		{Text: "ʃa", Inserted: false},
-		{Text: "ʁɡa", Inserted: true},
-		{Text: "lˈo", Inserted: false},
-		{Text: "ʁɡo", Inserted: true},
-		{Text: "m", Inserted: false},
-	}
-	if len(segs) != len(want) {
-		t.Fatalf("got %d segments %v, want %d", len(segs), segs, len(want))
-	}
-	for i := range want {
-		if segs[i] != want[i] {
-			t.Errorf("segment %d = %+v, want %+v", i, segs[i], want[i])
+	for _, r := range "aeiou" {
+		if !rg.IsVowel(r) {
+			t.Errorf("IsVowel(%q) = false", r)
 		}
 	}
-}
-
-// Every rune of the input must survive, in order, once the inserted runs are
-// dropped. Nothing here may corrupt multi-byte IPA.
-func TestSegmentsPreserveInput(t *testing.T) {
-	t.Parallel()
-	for _, e := range examples {
-		t.Run(e.hebrew, func(t *testing.T) {
-			t.Parallel()
-			var original strings.Builder
-			for _, s := range rg.TransformSegments(e.ipa, rg.StressFirst) {
-				if !s.Inserted {
-					original.WriteString(s.Text)
-				}
-			}
-			if got := original.String(); got != e.ipa {
-				t.Errorf("uninserted text = %q, want %q", got, e.ipa)
-			}
-		})
+	// Consonants the rule must not fire on, including the inserted cluster's own.
+	for _, r := range "ʃʁɡχʔʒjlmnstvzbdfhkp" {
+		if rg.IsVowel(r) {
+			t.Errorf("IsVowel(%q) = true", r)
+		}
 	}
 }

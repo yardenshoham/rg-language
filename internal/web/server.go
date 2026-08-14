@@ -21,14 +21,13 @@ import (
 //go:embed static
 var staticFiles embed.FS
 
-// maxInputRunes bounds what one request may ask the models to chew on.
+// maxInputRunes bounds what one request may ask the models to do.
 const maxInputRunes = 500
 
-// Server is the HTTP server. It is an http.Handler, middleware and all.
+// Server is the HTTP server, middleware and all.
 type Server struct {
 	logger   *slog.Logger
 	pipeline *pipeline.Pipeline
-	mux      *http.ServeMux
 	handler  http.Handler
 }
 
@@ -37,39 +36,35 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
 
-// NewServer registers all routes. The pipeline is loaded before the server
-// starts listening, so by the time anything can reach these handlers both models
-// are resident — which is also why Railway's health check does the right thing:
-// the port simply does not answer until the models are up.
+// NewServer registers all routes. The pipeline is loaded before the port opens, so
+// both models are resident by the time anything can reach these handlers — which
+// is also what makes Railway's health check honest.
 func NewServer(logger *slog.Logger, p *pipeline.Pipeline) *Server {
-	s := &Server{logger: logger, pipeline: p, mux: http.NewServeMux()}
+	s := &Server{logger: logger, pipeline: p}
+	mux := http.NewServeMux()
 
-	s.mux.Handle("GET /static/", cacheAssets(http.FileServerFS(staticFiles)))
-	s.mux.HandleFunc("GET /{$}", s.handleHome)
-	s.mux.HandleFunc("GET /transform", s.handleTransform)
-	// A ServeMux wildcard has to span a whole path segment, so the .wav suffix
-	// comes off in the handler.
-	s.mux.HandleFunc("GET /audio/{name}", s.handleAudio)
-	s.mux.HandleFunc("GET /about", s.handleAbout)
-	s.mux.HandleFunc("GET /health", s.handleHealth)
+	mux.Handle("GET /static/", cacheAssets(http.FileServerFS(staticFiles)))
+	mux.HandleFunc("GET /{$}", s.transformed("home page", pages.Home))
+	mux.HandleFunc("GET /transform", s.transformed("result fragment",
+		func(_ string, result pipeline.Result) g.Node { return pages.Result(result) }))
+	// A ServeMux wildcard spans a whole segment, so .wav comes off in the handler.
+	mux.HandleFunc("GET /audio/{name}", s.handleAudio)
+	mux.HandleFunc("GET /about", func(w http.ResponseWriter, _ *http.Request) {
+		s.render(w, "about page", pages.About())
+	})
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
 
-	s.handler = s.loggingMiddleware(s.recoveryMiddleware(s.mux))
+	s.handler = s.instrument(mux)
 	return s
 }
 
 // ListenAndServe blocks until ctx is cancelled, then shuts down gracefully.
 func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           s,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	srv := &http.Server{Addr: addr, Handler: s, ReadHeaderTimeout: 10 * time.Second}
 
+	s.logger.Info("server starting", "addr", addr)
 	errCh := make(chan error, 1)
-	go func() {
-		s.logger.Info("server starting", "addr", addr)
-		errCh <- srv.ListenAndServe()
-	}()
+	go func() { errCh <- srv.ListenAndServe() }()
 
 	select {
 	case err := <-errCh:
@@ -82,66 +77,38 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	}
 }
 
-// render writes n as an HTML response. The charset is not optional: without it
-// browsers guess, and Hebrew comes out as mojibake.
+// render writes n as HTML. The charset is not optional: without it browsers guess
+// and Hebrew comes out as mojibake.
 func (s *Server) render(w http.ResponseWriter, what string, n g.Node) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if n == nil {
-		// An empty fragment, which is how htmx clears the result when the box is
-		// emptied. Rendering a nil node would panic.
-		return
-	}
 	if err := n.Render(w); err != nil {
 		s.logger.Error("rendering "+what, "error", err)
 	}
 }
 
-// input reads and bounds the text field.
-func input(r *http.Request) string {
-	text := strings.TrimSpace(r.FormValue("text"))
-	if runes := []rune(text); len(runes) > maxInputRunes {
-		text = string(runes[:maxInputRunes])
+// transformed builds the handler for a page made of transformed input. An empty
+// box short-circuits to the zero Result, which renders as nothing.
+func (s *Server) transformed(what string, page func(string, pipeline.Result) g.Node) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		text := strings.TrimSpace(r.FormValue("text"))
+		if runes := []rune(text); len(runes) > maxInputRunes {
+			text = string(runes[:maxInputRunes])
+		}
+		var result pipeline.Result
+		if text != "" {
+			var err error
+			if result, err = s.pipeline.Transform(r.Context(), text); err != nil {
+				s.logger.Error("transforming", "error", err)
+				http.Error(w, "לא הצלחנו לתרגם את זה", http.StatusInternalServerError)
+				return
+			}
+		}
+		s.render(w, what, page(text, result))
 	}
-	return text
-}
-
-func (s *Server) transform(w http.ResponseWriter, r *http.Request) (string, pipeline.Result, bool) {
-	text := input(r)
-	if text == "" {
-		return "", pipeline.Result{}, true
-	}
-	result, err := s.pipeline.Transform(r.Context(), text)
-	if err != nil {
-		s.logger.Error("transforming", "error", err)
-		http.Error(w, "לא הצלחנו לתרגם את זה", http.StatusInternalServerError)
-		return "", pipeline.Result{}, false
-	}
-	return text, result, true
-}
-
-func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
-	text, result, ok := s.transform(w, r)
-	if !ok {
-		return
-	}
-	s.render(w, "home page", pages.Home(text, result))
-}
-
-func (s *Server) handleTransform(w http.ResponseWriter, r *http.Request) {
-	_, result, ok := s.transform(w, r)
-	if !ok {
-		return
-	}
-	s.render(w, "result fragment", pages.Result(result))
-}
-
-func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) {
-	s.render(w, "about page", pages.About())
 }
 
 // handleAudio serves synthesized speech. The hash covers the phonemes and the
-// synthesis settings, so a URL's content can never change — which is what makes
-// the immutable caching honest.
+// synthesis settings, so a URL's content can never change — hence immutable.
 func (s *Server) handleAudio(w http.ResponseWriter, r *http.Request) {
 	hash, ok := strings.CutSuffix(r.PathValue("name"), ".wav")
 	if !ok {
@@ -162,20 +129,16 @@ func (s *Server) handleAudio(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "audio/wav")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	// ServeContent rather than a plain Write, for the range requests: Safari
-	// probes a media URL with Range before it will play anything, and seeking
-	// needs them everywhere. WAV barely compresses, so nothing gzips it.
+	// ServeContent, not Write, for the range requests: Safari probes with Range
+	// before playing anything, and seeking needs them everywhere. WAV barely
+	// compresses, so nothing gzips it.
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(wav))
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprint(w, "ok")
-}
-
-// cacheAssets caches the embedded assets for an hour. Their URLs are not
-// content-addressed the way the audio's are, and an embedded file carries no
-// modification time for the browser to revalidate against, so a long cache would
-// mean a redeploy's new CSS not arriving for days. They total about 60 KB.
+// cacheAssets caches the embedded assets for an hour — not longer, because their
+// URLs are not content-addressed and an embedded file has no modification time to
+// revalidate against, so a redeploy's new CSS would take days to arrive. They total
+// about 60 KB, so re-fetching is cheap.
 func cacheAssets(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
@@ -183,29 +146,25 @@ func cacheAssets(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
+// instrument logs every request and turns a panic into a 500. Recovery runs before
+// the log line so the log reports the 500.
+func (s *Server) instrument(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-		next.ServeHTTP(rw, r)
-		s.logger.Info("request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rw.statusCode,
-			"duration", time.Since(start).Round(time.Microsecond),
-		)
-	})
-}
-
-func (s *Server) recoveryMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
 				s.logger.Error("panic recovered", "error", err, "path", r.URL.Path)
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
 			}
+			s.logger.Info("request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rw.statusCode,
+				"duration", time.Since(start).Round(time.Microsecond),
+			)
 		}()
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(rw, r)
 	})
 }
 

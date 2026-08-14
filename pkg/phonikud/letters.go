@@ -9,9 +9,8 @@ import (
 )
 
 var (
-	// sortDiacriticsRe finds a letter and the marks stacked on it, so they can be
-	// put in a canonical order. Two spellings of the same vowel must not produce
-	// two different results.
+	// A letter and its stacked marks, so they can be ordered canonically — two
+	// spellings of one vowel must not give two results.
 	sortDiacriticsRe = regexp.MustCompile(`\p{L}\p{M}+`)
 
 	// deduplicate folds the Hebrew-specific punctuation onto its ASCII twin.
@@ -21,15 +20,14 @@ var (
 		"\u05be", "-", // maqaf
 	)
 
-	// lettersRe splits a word into letters and the marks that belong to each. The
-	// en geresh and the prefix bar ride along with the letter they follow.
+	// Letters and their marks. The en geresh and prefix bar ride along with the
+	// letter they follow.
 	lettersRe = regexp.MustCompile(`(\p{L})([\p{M}'|]*)`)
 
 	hePattern = regexp.MustCompile(hePatternText)
 )
 
-// normalize decomposes the text, sorts each letter's marks and folds Hebrew
-// punctuation onto ASCII.
+// normalize decomposes, sorts each letter's marks and folds punctuation to ASCII.
 func normalize(text string) string {
 	text = norm.NFD.String(text)
 	text = sortDiacriticsRe.ReplaceAllStringFunc(text, func(match string) string {
@@ -41,9 +39,9 @@ func normalize(text string) string {
 	return deduplicate.Replace(text)
 }
 
-// letter is one letter with the marks stacked on it. allDiac keeps every mark;
-// diac drops the three marks phonikud adds on top of standard niqqud, so that
-// rules asking "does this letter have a vowel" are not fooled by a stress mark.
+// letter is one letter with its stacked marks. allDiac keeps every mark; diac
+// drops phonikud's three extra ones, so a rule asking "does this letter have a
+// vowel" is not fooled by a stress mark.
 type letter struct {
 	char    string
 	allDiac string
@@ -73,8 +71,8 @@ func getLetters(word string) []letter {
 	return letters
 }
 
-// isVowelDiac reports whether a mark counts as a vowel for syllable splitting.
-// A plain shva does not, but meteg — which marks a vocal shva — does.
+// isVowelDiac reports whether a mark counts as a vowel for syllable splitting: a
+// plain shva does not, but meteg (a vocal shva) does.
 func isVowelDiac(r rune) bool {
 	return (r >= hatafSegol && r <= kubuts) || r == kamatzKatan || r == vocalShvaDiacritic
 }
@@ -86,8 +84,8 @@ func hasVowelDiacs(s string) bool {
 	return strings.ContainsFunc(s, isVowelDiac)
 }
 
-// getSyllables splits a word into syllables. It is only accurate enough to find
-// the last one, which is all the stress prediction below needs.
+// getSyllables splits a word into syllables, accurately enough only to find the
+// last one — all the stress prediction below needs.
 func getSyllables(word string) []string {
 	letters := getLetters(word)
 	var syllables []string
@@ -138,8 +136,7 @@ func getSyllables(word string) []string {
 	return syllables
 }
 
-// addMilraHatama marks the last syllable as stressed, which is where Hebrew puts
-// the stress by default (milra).
+// addMilraHatama stresses the last syllable, Hebrew's default (milra).
 func addMilraHatama(word string) string {
 	syllables := getSyllables(word)
 	if len(syllables) == 0 {
@@ -160,8 +157,8 @@ func addMilraHatama(word string) string {
 	return strings.Join(syllables, "")
 }
 
-// sortHatama moves a stress mark off a letter that also carries masora, since
-// that letter is not pronounced and so cannot carry the stress.
+// sortHatama moves stress off a letter carrying masora: it is not pronounced, so
+// it cannot carry the stress.
 func sortHatama(letters []letter) []letter {
 	for i := range len(letters) - 1 {
 		diacs := []rune(letters[i].allDiac)

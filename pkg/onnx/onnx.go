@@ -1,8 +1,6 @@
-// Package onnx initializes the process-wide ONNX Runtime environment.
-//
-// The runtime is a C library loaded at run time from a path on disk, and it may
-// only be initialized once per process. Both model packages call Init, so
-// whichever loads first wins and the other is a no-op.
+// Package onnx initializes the process-wide ONNX Runtime environment. It is a C
+// library loaded from disk at run time and may only be initialized once per
+// process, so both model packages call Init and the first one wins.
 package onnx
 
 import (
@@ -16,34 +14,25 @@ import (
 // DefaultLibraryPath is where the container image puts the shared library.
 const DefaultLibraryPath = "/usr/local/lib/libonnxruntime.so"
 
-// LibraryPathEnv overrides it, which is how local development finds its own
-// unpacked copy.
+// LibraryPathEnv overrides it, for a locally unpacked copy.
 const LibraryPathEnv = "ONNXRUNTIME_LIB"
 
-var (
-	once    sync.Once
-	initErr error
-)
+var initOnce = sync.OnceValue(func() error {
+	path := os.Getenv(LibraryPathEnv)
+	if path == "" {
+		path = DefaultLibraryPath
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("ONNX Runtime shared library not found, set %s: %w", LibraryPathEnv, err)
+	}
+	ort.SetSharedLibraryPath(path)
+	return ort.InitializeEnvironment()
+})
 
-// Init loads the ONNX Runtime shared library. It is safe to call from every
-// constructor that needs it; only the first call does any work.
-func Init() error {
-	once.Do(func() {
-		path := os.Getenv(LibraryPathEnv)
-		if path == "" {
-			path = DefaultLibraryPath
-		}
-		if _, err := os.Stat(path); err != nil {
-			initErr = fmt.Errorf("ONNX Runtime shared library not found, set %s: %w", LibraryPathEnv, err)
-			return
-		}
-		ort.SetSharedLibraryPath(path)
-		initErr = ort.InitializeEnvironment()
-	})
-	return initErr
-}
+// Init loads the shared library. Safe to call from every constructor; only the
+// first call does any work.
+func Init() error { return initOnce() }
 
-// Destroy frees a tensor's C memory. It exists so that the callers, which all
-// free in a defer, can say once here rather than at every call site that there
-// is nothing useful to do when a free fails.
+// Destroy frees a tensor's C memory, saying once here rather than at every
+// deferred call site that a failed free is not actionable.
 func Destroy(value ort.Value) { _ = value.Destroy() }

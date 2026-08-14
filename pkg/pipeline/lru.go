@@ -5,15 +5,14 @@ import (
 	"sync"
 )
 
-// lru is a bounded, concurrency-safe cache keyed by string. Entries carry a
-// cost, so the same type bounds the small maps by entry count and the audio
-// cache by bytes.
+// lru is a bounded, concurrency-safe cache keyed by string. Entries carry a cost,
+// so one type can bound both the small maps and the audio cache.
 type lru[V any] struct {
 	mu      sync.Mutex
 	limit   int64
 	cost    int64
 	costOf  func(V) int64
-	order   *list.List // most recently used at the front
+	order   list.List // most recently used at the front
 	entries map[string]*list.Element
 }
 
@@ -24,12 +23,7 @@ type entry[V any] struct {
 }
 
 func newLRU[V any](limit int64, costOf func(V) int64) *lru[V] {
-	return &lru[V]{
-		limit:   limit,
-		costOf:  costOf,
-		order:   list.New(),
-		entries: map[string]*list.Element{},
-	}
+	return &lru[V]{limit: limit, costOf: costOf, entries: map[string]*list.Element{}}
 }
 
 func (c *lru[V]) get(key string) (V, bool) {

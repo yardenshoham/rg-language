@@ -28,23 +28,30 @@ func newWebCmd() *cobra.Command {
 		Example: "rg-language web --addr :25256",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			logger := cmd.Context().Value(loggerKey{}).(*slog.Logger)
-			if !cmd.Flags().Changed("addr") {
-				addr = listenAddr(addr)
+			level := slog.LevelInfo
+			if debug, _ := cmd.Flags().GetBool("debug"); debug {
+				level = slog.LevelDebug
 			}
+			logger := slog.New(slog.NewTextHandler(cmd.OutOrStdout(), &slog.HandlerOptions{Level: level}))
+
+			// Not a flag default: a set-but-unusable value should be reported.
 			if !cmd.Flags().Changed("audio-cache-mb") {
-				if mb, err := envInt("RG_AUDIO_CACHE_MB"); err != nil {
-					return err
-				} else if mb > 0 {
-					audioCacheMB = mb
+				if value := os.Getenv("RG_AUDIO_CACHE_MB"); value != "" {
+					mb, err := strconv.Atoi(value)
+					if err != nil {
+						return fmt.Errorf("invalid RG_AUDIO_CACHE_MB: %w", err)
+					}
+					if mb > 0 {
+						audioCacheMB = mb
+					}
 				}
 			}
 
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
-			// Loading takes a few seconds. Doing it before the port opens is what
-			// keeps a deployment from taking traffic it cannot serve yet.
+			// Loading takes a few seconds, and it happens before the port opens so a
+			// deployment never takes traffic it cannot serve yet.
 			started := time.Now()
 			logger.Info("loading models", "dir", modelsDir)
 			p, err := pipeline.New(ctx, pipeline.Options{
@@ -65,36 +72,21 @@ func newWebCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&addr, "addr", ":25256", "Listen address ($RG_ADDR, or $PORT)")
+	cmd.Flags().StringVar(&addr, "addr", listenAddr(), "Listen address ($RG_ADDR, or $PORT)")
 	cmd.Flags().StringVar(&modelsDir, "models", modelsDirDefault(), "Directory holding the two .onnx models ($RG_MODELS_DIR)")
 	cmd.Flags().IntVar(&audioCacheMB, "audio-cache-mb", 0, "Megabytes of synthesized audio to keep in memory ($RG_AUDIO_CACHE_MB)")
 	return cmd
 }
 
-// listenAddr resolves the address from the environment. Railway injects PORT and
-// expects the app to bind it.
-func listenAddr(fallback string) string {
+// listenAddr resolves the address from the environment; Railway injects PORT.
+func listenAddr() string {
 	if addr := os.Getenv("RG_ADDR"); addr != "" {
 		return addr
 	}
 	if port := os.Getenv("PORT"); port != "" {
 		return ":" + port
 	}
-	return fallback
-}
-
-// envInt reads an optional integer from the environment, reporting a value that
-// is set but unusable rather than silently ignoring it.
-func envInt(name string) (int, error) {
-	value := os.Getenv(name)
-	if value == "" {
-		return 0, nil
-	}
-	n, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, fmt.Errorf("invalid %s: %w", name, err)
-	}
-	return n, nil
+	return ":25256"
 }
 
 func modelsDirDefault() string {

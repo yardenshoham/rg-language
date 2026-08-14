@@ -2,12 +2,10 @@ package phonikud
 
 import "strings"
 
-// The finite-state transducer itself, ported from phonikud's hebrew.py.
-//
-// It holds no state beyond a three-letter window — previous, current, next —
-// which is what makes Hebrew's special cases tractable as a flat chain of rules.
-// Several of those rules look arbitrary. They are not: each encodes a real
-// Hebrew edge case that a native speaker validated. Do not tidy them.
+// The finite-state transducer, ported from phonikud's hebrew.py. It holds no state
+// beyond a three-letter window — previous, current, next — which is what makes
+// Hebrew's special cases a flat chain of rules. The rules that look arbitrary are
+// not: each encodes a real edge case a native speaker validated. Do not tidy them.
 //
 // Reference:
 //   - https://en.wikipedia.org/wiki/Help:IPA/Hebrew
@@ -31,8 +29,8 @@ func phonemizeHebrew(letters []letter) []string {
 	return phonemes
 }
 
-// handleYud reports whether a yod is a mater lectionis rather than a consonant,
-// in which case it contributes no sound of its own.
+// handleYud reports whether a yod is a mater rather than a consonant, and so
+// contributes no sound.
 func handleYud(cur letter, prev, next *letter) bool {
 	return next != nil &&
 		cur.diac == "" && // yod without diacritics
@@ -42,8 +40,8 @@ func handleYud(cur letter, prev, next *letter) bool {
 		(next.char != "ו" || next.diac == "" || strings.ContainsRune(next.diac, shva))
 }
 
-// handleVav resolves the vav, which is a consonant, two different vowels, or
-// silent, depending entirely on its marks and its neighbours.
+// handleVav resolves the vav: a consonant, either of two vowels, or silent,
+// depending entirely on its marks and neighbours.
 func handleVav(cur letter, prev, next *letter) (phonemes []string, skipConsonants, skipDiacritics bool, skipOffset int) {
 	if prev != nil && strings.ContainsRune(prev.diac, shva) && strings.ContainsRune(cur.diac, holam) {
 		return []string{"vo"}, true, true, 0
@@ -178,8 +176,8 @@ func letterToPhonemes(cur letter, prev, next *letter) ([]string, int) {
 	return keepPhonemes(sortStress(out)), skipOffset
 }
 
-// sortStress moves the stress mark to just before the vowel, which is where TTS
-// systems expect it; linguistics would put it at the start of the syllable.
+// sortStress moves the stress just before the vowel, where TTS expects it;
+// linguistics would put it at the syllable start.
 func sortStress(phonemes []string) []string {
 	joined := strings.Join(phonemes, "")
 	if !strings.Contains(joined, stressPhoneme) || !strings.ContainsAny(joined, "aeiou") {
@@ -201,8 +199,8 @@ func sortStress(phonemes []string) []string {
 	return kept
 }
 
-// keepPhonemes drops anything that is not made entirely of output characters,
-// which is how Hebrew letters, digits and quotes leave the stream.
+// keepPhonemes drops anything not made entirely of output characters, which is how
+// Hebrew letters, digits and quotes leave the stream.
 func keepPhonemes(phonemes []string) []string {
 	kept := phonemes[:0]
 	for _, p := range phonemes {

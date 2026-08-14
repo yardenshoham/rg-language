@@ -32,8 +32,7 @@ func TestLRUEvictsByCost(t *testing.T) {
 	}
 }
 
-// Overwriting a key has to adjust the running total, not add to it, or the cache
-// slowly starves itself.
+// Overwriting must adjust the running total, not add to it, or the cache starves.
 func TestLRUOverwriteAdjustsCost(t *testing.T) {
 	t.Parallel()
 	c := newLRU(10, byteCost)
@@ -50,8 +49,8 @@ func TestLRUOverwriteAdjustsCost(t *testing.T) {
 	}
 }
 
-// An entry larger than the whole budget still has to be readable once, or a long
-// sentence would be uncacheable and re-synthesized on every request.
+// An oversized entry must still be readable once, or a long sentence would be
+// re-synthesized on every request.
 func TestLRUKeepsAnOversizedEntry(t *testing.T) {
 	t.Parallel()
 	c := newLRU(10, byteCost)
@@ -89,8 +88,7 @@ func TestLRUConcurrent(t *testing.T) {
 	}
 }
 
-// The cost function has to count what a Result actually retains, or the byte
-// budget means nothing.
+// The cost must track what a Result retains, or the byte budget means nothing.
 func TestResultCostFollowsSize(t *testing.T) {
 	t.Parallel()
 	small := Result{Input: "שלום", IPA: "ʃalˈom"}

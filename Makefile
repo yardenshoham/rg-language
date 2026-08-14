@@ -10,7 +10,7 @@ ORT := $(DEBUG)/onnxruntime
 export ONNXRUNTIME_LIB = $(CURDIR)/$(ORT)/lib/libonnxruntime.so
 export RG_MODELS_DIR = $(CURDIR)/$(MODELS)
 
-.PHONY: models onnxruntime run say test test-full e2e shot lint tidy clean
+.PHONY: models onnxruntime run say test test-full e2e shot lint clean
 
 ## Download the two checkpoints and verify them. A mismatch is fatal: the voice
 ## was chosen by human listening, so a substituted checkpoint would invalidate

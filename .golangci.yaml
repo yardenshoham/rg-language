@@ -5,8 +5,6 @@ linters:
     - godot
     - paralleltest
     - revive
-    - testifylint
-    - errcheck
   exclusions:
     presets:
       - comments

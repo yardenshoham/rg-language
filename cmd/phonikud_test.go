@@ -96,8 +96,8 @@ func TestPhonikudRejectsUnknownStress(t *testing.T) {
 	}
 }
 
-// חכמה needs a kamatz katan, which the diacritizer cannot emit, so the lexicon
-// pins it. Unpinned it has no vowels at all; --raw shows that.
+// חכמה needs a kamatz katan the diacritizer cannot emit, so the lexicon pins it.
+// Unpinned it has no vowels at all, which --raw shows.
 func TestPhonikudRawSkipsLexicon(t *testing.T) {
 	t.Parallel()
 	if got := run(t, "", "phonikud", "חכמה"); !strings.Contains(got, "ipa        χoχmˈa") {
