@@ -150,6 +150,11 @@ New diacritizer mistakes are fixed by adding an entry to `pkg/pipeline/lexicon.j
 and redeploying. Pinning at the niqqud level keeps the phonemes, the transform
 and the Hebrew rendering all on the normal path.
 
+## Disclaimer
+
+This is a hobby project. It was live-coded, and none of the code has been
+reviewed. Treat it accordingly — do not use it for anything that matters.
+
 ## Licences
 
 The diacritizer is CC BY 4.0. The voice checkpoint is **non-commercial**, which
