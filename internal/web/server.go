@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -94,6 +95,18 @@ func (s *Server) transformed(what string, page func(string, pipeline.Result) g.N
 		if runes := []rune(text); len(runes) > maxInputRunes {
 			text = string(runes[:maxInputRunes])
 		}
+		// Keep the address bar in step with the box, so the URL is always
+		// shareable. htmx ignores this on a plain navigation, where it is already
+		// the URL. The bounded text is what goes in, so a shared link cannot ask
+		// for more than the box allowed.
+		if r.Header.Get("HX-Request") != "" {
+			shareable := "/"
+			if text != "" {
+				shareable += "?text=" + url.QueryEscape(text)
+			}
+			w.Header().Set("HX-Replace-Url", shareable)
+		}
+
 		var result pipeline.Result
 		if text != "" {
 			var err error

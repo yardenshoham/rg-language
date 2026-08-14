@@ -81,12 +81,18 @@ test.describe("the transform", () => {
 
   test("updates live as you type, without a navigation", async ({ page }) => {
     await page.goto("/");
-    const url = page.url();
+    // A reload would wipe this, which is what tells a swap from a navigation.
+    await page.evaluate(() => (window.sameDocument = true));
 
     await page.getByRole("textbox").fill("שלום");
 
     await expect(plain(page)).toHaveText("שרגלורגום");
-    expect(page.url(), "htmx should not navigate").toBe(url);
+    // The URL tracks the box so it stays shareable, and emptying the box must
+    // not leave ?text= behind.
+    await expect(page).toHaveURL("/?text=" + encodeURIComponent("שלום"));
+    await page.getByRole("textbox").fill("");
+    await expect(page).toHaveURL("/");
+    expect(await page.evaluate(() => window.sameDocument), "htmx should not navigate").toBe(true);
   });
 
   test("shows all three renderings", async ({ page }) => {

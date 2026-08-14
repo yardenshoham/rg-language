@@ -11,8 +11,9 @@ import (
 	"github.com/yardenshoham/rg-language/internal/web"
 )
 
-// get serves path with no models loaded — most of the site needs none.
-func get(t *testing.T, path string) *http.Response {
+// get serves path with no models loaded — most of the site needs none. headers
+// are set on the request as name, value pairs.
+func get(t *testing.T, path string, headers ...string) *http.Response {
 	t.Helper()
 	srv := httptest.NewServer(web.NewServer(slog.New(slog.DiscardHandler), nil))
 	t.Cleanup(srv.Close)
@@ -20,6 +21,9 @@ func get(t *testing.T, path string) *http.Response {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+path, nil)
 	if err != nil {
 		t.Fatalf("building request: %v", err)
+	}
+	for i := 0; i < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -85,6 +89,20 @@ func TestEmptyTransformClearsTheResult(t *testing.T) {
 				t.Errorf("body = %q, want empty", got)
 			}
 		})
+	}
+}
+
+// htmx swaps the result without navigating, so the URL only stays shareable if
+// the response says what it should be. Emptying the box must clear the query
+// rather than leave ?text= behind, and a plain navigation is already at its URL.
+// The Hebrew round trip needs the models, so the browser suite covers that.
+func TestHtmxKeepsTheURLShareable(t *testing.T) {
+	t.Parallel()
+	if got := get(t, "/transform?text=%20%20", "HX-Request", "true").Header.Get("HX-Replace-Url"); got != "/" {
+		t.Errorf("HX-Replace-Url = %q, want %q", got, "/")
+	}
+	if got := get(t, "/transform?text=").Header.Get("HX-Replace-Url"); got != "" {
+		t.Errorf("HX-Replace-Url = %q on a non-htmx request, want none", got)
 	}
 }
 
