@@ -1,0 +1,22 @@
+name: Go
+permissions:
+  contents: read
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Make sure we don't need go mod tidy
+        run: go mod tidy -diff
+      - name: Run govulncheck
+        run: go tool govulncheck ./...
+      # The fast suite: no ONNX models and no runtime library, and it still
+      # replays the whole corpus through everything below the diacritizer.
+      - name: Test
+        run: go test -v ./...
