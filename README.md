@@ -157,7 +157,7 @@ reviewed. Treat it accordingly — do not use it for anything that matters.
 
 ## Licences
 
-The code is Apache 2.0 — see [`LICENSE`](LICENSE). Copyright 2026 Yarden Shoham.
+The code is Apache 2.0 — see [`LICENSE`](LICENSE). Copyright Yarden Shoham.
 One exception: `pkg/phonikud` is a fork of the Python `phonikud` transducer, so
 that directory carries its upstream terms too.
 
