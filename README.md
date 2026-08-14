@@ -152,7 +152,7 @@ and the Hebrew rendering all on the normal path.
 
 ## Disclaimer
 
-This is a hobby project. It was live-coded, and none of the code has been
+This is a hobby project. It was vibe-coded, and none of the code has been
 reviewed. Treat it accordingly — do not use it for anything that matters.
 
 ## Licences
