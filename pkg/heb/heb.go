@@ -130,7 +130,7 @@ type Syllable struct {
 // Syllables splits IPA into per-word syllables. Maximal onset, which makes each
 // inserted /ʁɡ/ an onset — so an inserted syllable is exactly one starting ʁɡ.
 func Syllables(ipa string) [][]Syllable {
-	var words [][]Syllable
+	words := make([][]Syllable, 0, strings.Count(ipa, " ")+1)
 	for word := range strings.FieldsSeq(ipa) {
 		syllables := make([]Syllable, 0, len(word))
 		pending, stressed := "", false

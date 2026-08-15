@@ -1,5 +1,4 @@
-When you change Go code, before stopping: `go fmt`, `go fix`, `go mod tidy`, `golangci-lint`,
-and test what you changed. In tests use `t.Context()`; in cobra commands use `cmd.Context()`.
+When you change Go code, before stopping: `make lint` and test what you changed.
 
 `go run . web --addr ":25256"` serves the site. `go run . phonikud "שָׁלוֹם"` runs everything
 below the diacritizer with no models loaded, which is the fastest way to check a change. The

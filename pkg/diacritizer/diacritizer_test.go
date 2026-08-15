@@ -75,7 +75,7 @@ func TestFold(t *testing.T) {
 // Anything unrepresentable collapses into one token so positions stay put.
 func TestTokenize(t *testing.T) {
 	t.Parallel()
-	d := &Diacritizer{vocab: map[rune]int64{'ש': 234, 'ל': 221, 'ו': 214, 'ם': 225},
+	d := &Diacritizer{vocab: map[string]int64{"ש": 234, "ל": 221, "ו": 214, "ם": 225},
 		unk: 0, cls: 1, sep: 2}
 
 	tokens := d.tokenize([]rune("שלום"))

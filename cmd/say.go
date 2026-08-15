@@ -24,7 +24,7 @@ func newSayCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("loading models: %w", err)
 			}
-			defer p.Close() //nolint:errcheck // nothing useful to do about it here
+			defer p.Close()
 
 			result, err := p.Transform(cmd.Context(), strings.Join(args, " "))
 			if err != nil {
