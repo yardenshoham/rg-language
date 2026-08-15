@@ -1,9 +1,8 @@
 // Package voice turns IPA phonemes into speech with a Matcha-TTS checkpoint.
 //
-// It is fed phonemes, never text: RG output is nonsense words, and any engine
-// doing its own text-to-phoneme conversion would "correct" them — which is why
-// exact syllable reproduction is achievable at all. Any future voice that cannot
-// accept IPA directly is disqualified.
+// It is fed phonemes, never text: RG output is nonsense words, and any engine doing
+// its own text-to-phoneme conversion would "correct" them. Any future voice that
+// cannot accept IPA directly is disqualified.
 package voice
 
 import (
@@ -11,6 +10,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -79,9 +79,8 @@ func New(ctx context.Context, modelPath string) (*Voice, error) {
 }
 
 // readMetadata takes the symbol table and the sample rate from the checkpoint itself.
-// Matcha embeds both, which is why this package ships no config file of its own: a
-// checkpoint and the table it was trained with cannot drift apart if there is only one
-// copy of the table and the checkpoint carries it.
+// Matcha embeds both, which is why this package ships no config file: a table carried
+// by the checkpoint it was trained with cannot drift apart from it.
 func (v *Voice) readMetadata() error {
 	meta, err := v.session.GetModelMetadata()
 	if err != nil {
@@ -89,24 +88,15 @@ func (v *Voice) readMetadata() error {
 	}
 	defer func() { _ = meta.Destroy() }()
 
-	lookup := func(key string) (string, error) {
-		value, ok, err := meta.LookupCustomMetadataMap(key)
-		if err != nil {
-			return "", fmt.Errorf("reading %s: %w", key, err)
-		}
-		if !ok {
-			return "", fmt.Errorf("voice is missing %s, so it is not a Matcha checkpoint", key)
-		}
-		return value, nil
+	// A key the checkpoint does not carry reads back empty and fails the parse below.
+	lookup := func(key string) string {
+		value, _, _ := meta.LookupCustomMetadataMap(key)
+		return value
 	}
 
-	raw, err := lookup("matcha.symbols")
-	if err != nil {
-		return err
-	}
 	var symbols []string
-	if err := json.Unmarshal([]byte(raw), &symbols); err != nil {
-		return fmt.Errorf("parsing matcha.symbols: %w", err)
+	if err := json.Unmarshal([]byte(lookup("matcha.symbols")), &symbols); err != nil {
+		return fmt.Errorf("parsing matcha.symbols, so this is not a Matcha checkpoint: %w", err)
 	}
 	v.ids = make(map[rune]int64, len(symbols))
 	for id, symbol := range symbols {
@@ -117,17 +107,13 @@ func (v *Voice) readMetadata() error {
 		}
 	}
 
-	rate, err := lookup("matcha.sample_rate")
-	if err != nil {
-		return err
-	}
+	rate := lookup("matcha.sample_rate")
 	if v.sampleRate, err = strconv.Atoi(rate); err != nil {
 		return fmt.Errorf("parsing matcha.sample_rate %q: %w", rate, err)
 	}
 	return nil
 }
 
-// Close releases the model.
 func (v *Voice) Close() error { return v.session.Destroy() }
 
 // phonemeIDs maps IPA to symbol ids, with a blank before, between and after every one.
@@ -150,26 +136,20 @@ func (v *Voice) phonemeIDs(ipa string) []int64 {
 func (v *Voice) Synth(ipa string) ([]byte, error) {
 	ids := v.phonemeIDs(ipa + tailPhonemes)
 
-	x, err := ort.NewTensor(ort.NewShape(1, int64(len(ids))), ids)
-	if err != nil {
-		return nil, fmt.Errorf("building input tensor: %w", err)
+	x, xErr := ort.NewTensor(ort.NewShape(1, int64(len(ids))), ids)
+	lengths, lenErr := ort.NewTensor(ort.NewShape(1), []int64{int64(len(ids))})
+	scales, scaleErr := ort.NewTensor(ort.NewShape(2), []float32{temperature, lengthScale})
+	if err := errors.Join(xErr, lenErr, scaleErr); err != nil {
+		return nil, fmt.Errorf("building voice input: %w", err)
 	}
-	defer onnx.Destroy(x)
-
-	lengths, err := ort.NewTensor(ort.NewShape(1), []int64{int64(len(ids))})
-	if err != nil {
-		return nil, fmt.Errorf("building length tensor: %w", err)
+	// After the check, never before: Destroy dereferences its receiver.
+	inputs := []ort.Value{x, lengths, scales}
+	for _, in := range inputs {
+		defer onnx.Destroy(in)
 	}
-	defer onnx.Destroy(lengths)
-
-	scales, err := ort.NewTensor(ort.NewShape(2), []float32{temperature, lengthScale})
-	if err != nil {
-		return nil, fmt.Errorf("building scales tensor: %w", err)
-	}
-	defer onnx.Destroy(scales)
 
 	outputs := []ort.Value{nil, nil}
-	if err := v.session.Run([]ort.Value{x, lengths, scales}, outputs); err != nil {
+	if err := v.session.Run(inputs, outputs); err != nil {
 		return nil, fmt.Errorf("running voice: %w", err)
 	}
 	defer onnx.Destroy(outputs[0])
@@ -188,13 +168,10 @@ func (v *Voice) Synth(ipa string) ([]byte, error) {
 
 // trim cuts the padded output tensor down to the samples the model actually produced.
 func trim(samples []float32, lengths []int64) []float32 {
-	if len(lengths) == 0 {
+	if len(lengths) == 0 || lengths[0] < 0 || int(lengths[0]) >= len(samples) {
 		return samples
 	}
-	if n := int(lengths[0]); n >= 0 && n < len(samples) {
-		return samples[:n]
-	}
-	return samples
+	return samples[:lengths[0]]
 }
 
 // wav encodes float samples as a mono 16-bit PCM WAV, clipped to [-1, 1]. The clip is

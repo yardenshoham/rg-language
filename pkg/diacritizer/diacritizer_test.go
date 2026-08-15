@@ -1,7 +1,6 @@
 package diacritizer
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -105,19 +104,10 @@ func TestTokenize(t *testing.T) {
 
 // Whatever the model decides, stripping the niqqud again must return every input
 // character exactly once — the guard against the reassembly losing or duplicating
-// text around tokens that are not one-per-rune. Needs the model, so it can skip.
+// text around tokens that are not one-per-rune.
 func TestReassemblyRoundTrip(t *testing.T) {
 	t.Parallel()
-	dir := corpustest.ModelsDir()
-	d, err := New(t.Context(), filepath.Join(dir, "phonikud-1.0.onnx"))
-	if err != nil {
-		t.Skipf("no diacritizer in %s, set RG_MODELS_DIR: %v", dir, err)
-	}
-	t.Cleanup(func() {
-		if err := d.Close(); err != nil {
-			t.Errorf("closing diacritizer: %v", err)
-		}
-	})
+	d := corpustest.Model(t, "phonikud-1.0.onnx", New)
 
 	for _, in := range []string{
 		"שלום עולם",

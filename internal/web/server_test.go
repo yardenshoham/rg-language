@@ -11,14 +11,12 @@ import (
 	"github.com/yardenshoham/rg-language/internal/web"
 )
 
-// get serves path with no models loaded — most of the site needs none. headers
-// are set on the request as name, value pairs.
+// get serves path with no models loaded; headers are name, value pairs.
 func get(t *testing.T, path string, headers ...string) *http.Response {
 	t.Helper()
 	return getWith(t, web.Config{}, path, headers...)
 }
 
-// getWith is get with a configured server, for the optional features.
 func getWith(t *testing.T, config web.Config, path string, headers ...string) *http.Response {
 	t.Helper()
 	srv := httptest.NewServer(web.NewServer(slog.New(slog.DiscardHandler), nil, config))
@@ -85,23 +83,18 @@ func TestHomeIsUTF8Hebrew(t *testing.T) {
 func TestEmptyTransformClearsTheResult(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"/transform?text=", "/transform", "/transform?text=%20%20"} {
-		t.Run(path, func(t *testing.T) {
-			t.Parallel()
-			resp := get(t, path)
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("status = %d, want 200", resp.StatusCode)
-			}
-			if got := body(t, resp); got != "" {
-				t.Errorf("body = %q, want empty", got)
-			}
-		})
+		resp := get(t, path)
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s: status = %d, want 200", path, resp.StatusCode)
+		}
+		if got := body(t, resp); got != "" {
+			t.Errorf("GET %s: body = %q, want empty", path, got)
+		}
 	}
 }
 
-// htmx swaps the result without navigating, so the URL only stays shareable if
-// the response says what it should be. Emptying the box must clear the query
-// rather than leave ?text= behind, and a plain navigation is already at its URL.
-// The Hebrew round trip needs the models, so the browser suite covers that.
+// htmx swaps the result without navigating, so the URL stays shareable only if the
+// response says what it should be. A plain navigation is already at its URL.
 func TestHtmxKeepsTheURLShareable(t *testing.T) {
 	t.Parallel()
 	if got := get(t, "/transform?text=%20%20", "HX-Request", "true").Header.Get("HX-Replace-Url"); got != "/" {
@@ -130,18 +123,14 @@ func TestAbout(t *testing.T) {
 	}
 }
 
-// Analytics are opt-in, and each server answers with its own configuration —
-// they are threaded through the pages rather than kept in a package variable.
+// Analytics are opt-in, and each server answers with its own configuration.
 func TestPostHogIsOptIn(t *testing.T) {
 	t.Parallel()
 
 	for _, path := range []string{"/", "/about"} {
-		t.Run("off"+path, func(t *testing.T) {
-			t.Parallel()
-			if page := body(t, get(t, path)); strings.Contains(page, "posthog") {
-				t.Error("page mentions posthog with no key configured")
-			}
-		})
+		if page := body(t, get(t, path)); strings.Contains(page, "posthog") {
+			t.Errorf("%s mentions posthog with no key configured", path)
+		}
 	}
 
 	t.Run("configured", func(t *testing.T) {
@@ -178,8 +167,7 @@ func TestPostHogIsOptIn(t *testing.T) {
 	})
 }
 
-// Served from the binary: a CDN is one more thing to break, and Hebrew needs a
-// font with real mark positioning.
+// Served from the binary: a CDN is one more thing to break.
 func TestStaticAssets(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{
@@ -189,12 +177,8 @@ func TestStaticAssets(t *testing.T) {
 		"/static/fonts/noto-sans-hebrew-400.woff2",
 		"/static/fonts/noto-sans-hebrew-600.woff2",
 	} {
-		t.Run(path, func(t *testing.T) {
-			t.Parallel()
-			resp := get(t, path)
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("status = %d, want 200", resp.StatusCode)
-			}
-		})
+		if resp := get(t, path); resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s: status = %d, want 200", path, resp.StatusCode)
+		}
 	}
 }

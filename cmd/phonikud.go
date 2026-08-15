@@ -15,8 +15,8 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
-// row is one line of JSON output. The field names match the corpus, so a run can
-// be diffed against testdata/corpus.jsonl directly.
+// row is one line of JSON output; the field names match the corpus, so a run diffs
+// straight against testdata/corpus.jsonl.
 type row struct {
 	Vocalized string `json:"vocalized"`
 	IPA       string `json:"ipa"`
@@ -26,9 +26,28 @@ type row struct {
 	Doubled   bool   `json:"doubled_vowel,omitempty"`
 }
 
-// newPhonikudCmd exposes everything below the diacritizer. That half is pure string
-// handling, so this needs neither the models nor the ONNX Runtime and answers
-// instantly — the quick way to check a rule, and to diff against the Python original.
+func newRow(vocalized, ipa, rgIPA string) row {
+	return row{
+		Vocalized: vocalized, IPA: ipa, RG: rgIPA, HebRG: heb.RG(vocalized),
+		Latin: heb.Latin(rgIPA), Doubled: pipeline.DoubledVowel(ipa),
+	}
+}
+
+// write prints the block both `phonikud` and `say` show.
+func (r row) write(w io.Writer) {
+	fmt.Fprintf(w, "niqqud     %s\n", r.Vocalized)
+	fmt.Fprintf(w, "ipa        %s\n", r.IPA)
+	fmt.Fprintf(w, "rg ipa     %s\n", r.RG)
+	fmt.Fprintf(w, "rg         %s\n", heb.StripMarks(r.HebRG))
+	fmt.Fprintf(w, "rg niqqud  %s\n", r.HebRG)
+	fmt.Fprintf(w, "rg latin   %s\n", r.Latin)
+	if r.Doubled {
+		fmt.Fprintf(w, "warning    two identical adjacent vowels, which real Hebrew does not produce\n")
+	}
+}
+
+// newPhonikudCmd exposes everything below the diacritizer: pure string handling, so it
+// needs neither the models nor the ONNX Runtime — the quick way to check a rule.
 func newPhonikudCmd() *cobra.Command {
 	var (
 		asJSON      bool
@@ -47,9 +66,7 @@ func newPhonikudCmd() *cobra.Command {
   jq -r .vocalized pkg/phonikud/testdata/corpus.jsonl | rg-language phonikud --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mode := rg.StressMode(stressMode)
-			switch mode {
-			case rg.StressFirst, rg.StressSecond, rg.StressBoth:
-			default:
+			if mode != rg.StressFirst && mode != rg.StressSecond && mode != rg.StressBoth {
 				return fmt.Errorf("unknown stress mode %q, want first, second or both", stressMode)
 			}
 
@@ -58,19 +75,12 @@ func newPhonikudCmd() *cobra.Command {
 					vocalized = pipeline.ApplyLexicon(pipeline.NormalizeNiqqud(vocalized))
 				}
 				ipa := phonikud.Phonemize(vocalized)
-				rgIPA := rg.Transform(ipa, mode)
-				if !asJSON {
-					writeRenderings(cmd.OutOrStdout(), vocalized, ipa, rgIPA)
-					return nil
+				r := newRow(vocalized, ipa, rg.Transform(ipa, mode))
+				if asJSON {
+					return json.NewEncoder(cmd.OutOrStdout()).Encode(r)
 				}
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(row{
-					Vocalized: vocalized,
-					IPA:       ipa,
-					RG:        rgIPA,
-					HebRG:     heb.RG(vocalized),
-					Latin:     heb.Latin(rgIPA),
-					Doubled:   pipeline.DoubledVowel(ipa),
-				})
+				r.write(cmd.OutOrStdout())
+				return nil
 			}
 
 			if len(args) > 0 {
@@ -96,18 +106,4 @@ func newPhonikudCmd() *cobra.Command {
 	cmd.Flags().StringVar(&stressMode, "stress", string(rg.StressFirst), "Which copy of the stressed vowel keeps the stress: first, second or both")
 	cmd.Flags().BoolVar(&noNormalize, "raw", false, "Skip the niqqud repair and the override lexicon, phonemizing the input as given")
 	return cmd
-}
-
-// writeRenderings prints the block both `phonikud` and `say` show.
-func writeRenderings(w io.Writer, vocalized, ipa, rgIPA string) {
-	hebRG := heb.RG(vocalized)
-	fmt.Fprintf(w, "niqqud     %s\n", vocalized)
-	fmt.Fprintf(w, "ipa        %s\n", ipa)
-	fmt.Fprintf(w, "rg ipa     %s\n", rgIPA)
-	fmt.Fprintf(w, "rg         %s\n", heb.StripMarks(hebRG))
-	fmt.Fprintf(w, "rg niqqud  %s\n", hebRG)
-	fmt.Fprintf(w, "rg latin   %s\n", heb.Latin(rgIPA))
-	if pipeline.DoubledVowel(ipa) {
-		fmt.Fprintf(w, "warning    two identical adjacent vowels, which real Hebrew does not produce\n")
-	}
 }

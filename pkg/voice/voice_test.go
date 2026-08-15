@@ -2,17 +2,15 @@ package voice
 
 import (
 	"encoding/binary"
-	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 
 	"github.com/yardenshoham/rg-language/internal/corpustest"
 )
 
-// testVoice builds a Voice with a stand-in symbol table and no session, so the
-// encoding can be checked without the 131 MB checkpoint.
+// testVoice has a stand-in symbol table and no session, so the encoding can be
+// checked without the 131 MB checkpoint.
 func testVoice() *Voice {
 	return &Voice{
 		ids:        map[rune]int64{'ʃ': 96, 'a': 14, 'ʁ': 94, 'ɡ': 66, 'l': 24, 'ˈ': 120, 'o': 27, 'm': 25},
@@ -119,16 +117,7 @@ func TestWAVHeader(t *testing.T) {
 // to a differently-trained voice would introduce. Needs the model, so it can skip.
 func TestCheckpointSaysEverythingWeCanEmit(t *testing.T) {
 	t.Parallel()
-	dir := corpustest.ModelsDir()
-	v, err := New(t.Context(), filepath.Join(dir, "matcha-he-en.onnx"))
-	if err != nil {
-		t.Skipf("no voice in %s, set RG_MODELS_DIR: %v", dir, err)
-	}
-	t.Cleanup(func() {
-		if err := v.Close(); err != nil {
-			t.Errorf("closing voice: %v", err)
-		}
-	})
+	v := corpustest.Model(t, "matcha-he-en.onnx", New)
 
 	if v.sampleRate != 22050 {
 		t.Errorf("sample rate = %d, want 22050", v.sampleRate)
@@ -151,7 +140,7 @@ func TestCheckpointSaysEverythingWeCanEmit(t *testing.T) {
 			missing = append(missing, string(r))
 		}
 	}
-	sort.Strings(missing)
+	slices.Sort(missing)
 	if len(missing) > 0 {
 		t.Errorf("the checkpoint cannot say %d symbol(s) the pipeline emits: %s",
 			len(missing), strings.Join(missing, " "))

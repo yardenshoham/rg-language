@@ -1,10 +1,9 @@
 // Package heb renders RG for humans: Hebrew with niqqud, the same stripped, and
 // hyphenated Latin syllables.
 //
-// It runs on the vocalized Hebrew rather than converting IPA back to letters. The
-// niqqud already marks every vowel, so the same rule applies directly to the text,
-// which avoids an IPA-to-Hebrew generator and its matres lectionis, final forms
-// and silent א/ה/ע.
+// It runs on the vocalized Hebrew rather than converting IPA back to letters: the
+// niqqud already marks every vowel, which avoids an IPA-to-Hebrew generator and its
+// matres lectionis, final forms and silent א/ה/ע.
 package heb
 
 import (
@@ -66,12 +65,8 @@ func StripMarks(text string) string {
 	}, text)
 }
 
-type unit struct {
-	letter string
-	marks  string
-}
+type unit struct{ letter, marks string }
 
-// vowel returns the first vowel mark on u, or "" when it carries none.
 func (u unit) vowel() string {
 	for _, m := range u.marks {
 		if _, ok := vowels[string(m)]; ok {
@@ -81,7 +76,6 @@ func (u unit) vowel() string {
 	return ""
 }
 
-// units splits text into (letter, marks) pairs.
 func units(text string) []unit {
 	var us []unit
 	for _, r := range text {
@@ -110,11 +104,10 @@ func RGSegments(vocalized string) []rg.Segment {
 
 	var segs []rg.Segment
 	add := func(text string, inserted bool) {
-		if n := len(segs); n > 0 && segs[n-1].Inserted == inserted {
-			segs[n-1].Text += text
-			return
+		if n := len(segs); n == 0 || segs[n-1].Inserted != inserted {
+			segs = append(segs, rg.Segment{Inserted: inserted})
 		}
-		segs = append(segs, rg.Segment{Text: text, Inserted: inserted})
+		segs[len(segs)-1].Text += text
 	}
 
 	for i := 0; i < len(us); i++ {
@@ -123,7 +116,7 @@ func RGSegments(vocalized string) []rg.Segment {
 
 		var sound, copied, mater string
 		switch {
-		case cur.letter == vav && (strings.Contains(cur.marks, holam) || strings.Contains(cur.marks, holamHaser)):
+		case cur.letter == vav && strings.ContainsAny(cur.marks, holam+holamHaser):
 			sound, copied = "o", vav+holam // holam male: the vav carries it
 		case cur.letter == vav && strings.Contains(cur.marks, dagesh) && vowel == "" &&
 			i > 0 && us[i-1].vowel() == "":
@@ -142,6 +135,7 @@ func RGSegments(vocalized string) []rg.Segment {
 
 		add(cur.letter+strings.ReplaceAll(cur.marks, meteg, "")+mater, false)
 		if sound != "" {
+			// The copy keeps the mater yod, which makes the i unambiguous (פירגיצרגה).
 			if sound == "i" && mater != "" {
 				copied += yod
 			}

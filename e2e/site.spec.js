@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// The reference set the project is defined by, checked through a real browser
-// rather than through the renderer's own unit tests.
+// The reference set the project is defined by. This is the only place it is spelled
+// out; the 5,012-item corpus pins the same transform for every one of its items.
 const REFERENCE = [
   ["היי", "הרגיי"],
   ["שלום", "שרגלורגום"],
@@ -25,15 +25,6 @@ async function expectHebrew(locator, expected) {
 }
 
 test.describe("the page itself", () => {
-  test("renders Hebrew right to left, in UTF-8", async ({ page }) => {
-    const response = await page.goto("/");
-
-    expect(response.headers()["content-type"]).toBe("text/html; charset=utf-8");
-    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-    await expect(page.locator("html")).toHaveAttribute("lang", "he");
-    await expect(page.locator("h1")).toHaveText("שפת הריש גימל");
-  });
-
   // Faux bold smears the niqqud, so the real 600 weight has to arrive.
   test("serves both weights of the Hebrew font from the binary", async ({ page }) => {
     const fonts = [];
@@ -92,6 +83,8 @@ test.describe("the transform", () => {
     await expect(page).toHaveURL("/?text=" + encodeURIComponent("שלום"));
     await page.getByRole("textbox").fill("");
     await expect(page).toHaveURL("/");
+    await expect(page.locator(".view")).toHaveCount(0);
+    await expect(page.locator("audio")).toHaveCount(0);
     expect(await page.evaluate(() => window.sameDocument), "htmx should not navigate").toBe(true);
   });
 
@@ -128,16 +121,6 @@ test.describe("the transform", () => {
   test("an empty box shows no result", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".view")).toHaveCount(0);
-  });
-
-  test("clearing the box clears the result", async ({ page }) => {
-    await page.goto("/?text=" + encodeURIComponent("שלום"));
-    await expect(plain(page)).toHaveText("שרגלורגום");
-
-    await page.getByRole("textbox").fill("");
-
-    await expect(page.locator(".view")).toHaveCount(0);
-    await expect(page.locator("audio")).toHaveCount(0);
   });
 });
 

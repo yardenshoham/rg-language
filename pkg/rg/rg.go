@@ -1,15 +1,13 @@
-// Package rg applies the Resh-Gimel transform to IPA phonemes.
+// Package rg applies the Resh-Gimel transform to IPA phonemes: after every vowel,
+// insert /ʁɡ/ and a copy of that vowel.
 //
-// No syllabification is needed: the inserted material always lands right after a
-// vowel, so the syllable boundary is invisible in the output — sha|lom and shal|om
-// both give shargalorgom. The rule reduces to "after every vowel insert /ʁɡ/ plus
-// a copy of it", which is a per-letter yes/no.
+// No syllabification is needed: the insert lands right after a vowel, so the syllable
+// boundary is invisible — sha|lom and shal|om both give shargalorgom.
 package rg
 
 import "strings"
 
-// Stress is U+02C8, Insert the /ʁɡ/ cluster. Both are multi-byte, so this works
-// on runes.
+// Stress is U+02C8 and Insert the /ʁɡ/ cluster; both are multi-byte, so work on runes.
 const (
 	Stress = "ˈ"
 	Insert = "ʁɡ"
@@ -31,8 +29,8 @@ const (
 )
 
 // Segment is a run of transformed text; Inserted marks what the rule added, so the
-// UI can highlight it. Only package heb builds these — raw IPA is never shown to
-// users, so Transform returns a plain string.
+// UI can highlight it. Built only by package heb: raw IPA is never shown to users,
+// so Transform returns a plain string.
 type Segment struct {
 	Text     string
 	Inserted bool
@@ -54,18 +52,16 @@ func Transform(ipa string, mode StressMode) string {
 	runes := []rune(ipa)
 	var b strings.Builder
 	for i := 0; i < len(runes); i++ {
+		v, first, second := string(runes[i]), "", ""
 		// The mark precedes its vowel, so the two move together and mode decides
 		// which copy keeps it.
-		if string(runes[i]) == Stress && i+1 < len(runes) && IsVowel(runes[i+1]) {
+		if v == Stress && i+1 < len(runes) && IsVowel(runes[i+1]) {
 			i++
-			v := string(runes[i])
-			b.WriteString(firstStress + v + Insert + secondStress + v)
-			continue
+			v, first, second = string(runes[i]), firstStress, secondStress
 		}
-		v := string(runes[i])
-		b.WriteString(v)
+		b.WriteString(first + v)
 		if IsVowel(runes[i]) {
-			b.WriteString(Insert + v)
+			b.WriteString(Insert + second + v)
 		}
 	}
 	return b.String()

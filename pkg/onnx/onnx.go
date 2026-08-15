@@ -4,6 +4,7 @@
 package onnx
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"sync"
@@ -11,26 +12,20 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-// DefaultLibraryPath is where the container image puts the shared library.
-const DefaultLibraryPath = "/usr/local/lib/libonnxruntime.so"
-
-// LibraryPathEnv overrides it, for a locally unpacked copy.
-const LibraryPathEnv = "ONNXRUNTIME_LIB"
+const (
+	defaultLibraryPath = "/usr/local/lib/libonnxruntime.so" // where the image puts it
+	libraryPathEnv     = "ONNXRUNTIME_LIB"                  // override, for a local copy
+)
 
 var initOnce = sync.OnceValue(func() error {
-	path := os.Getenv(LibraryPathEnv)
-	if path == "" {
-		path = DefaultLibraryPath
-	}
+	path := cmp.Or(os.Getenv(libraryPathEnv), defaultLibraryPath)
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("ONNX Runtime shared library not found, set %s: %w", LibraryPathEnv, err)
+		return fmt.Errorf("ONNX Runtime shared library not found, set %s: %w", libraryPathEnv, err)
 	}
 	ort.SetSharedLibraryPath(path)
 	return ort.InitializeEnvironment()
 })
 
-// Init loads the shared library. Safe to call from every constructor; only the
-// first call does any work.
 func Init() error { return initOnce() }
 
 // Destroy frees a tensor's C memory, saying once here rather than at every

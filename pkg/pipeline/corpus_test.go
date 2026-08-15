@@ -2,7 +2,6 @@ package pipeline_test
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/yardenshoham/rg-language/internal/corpustest"
@@ -10,33 +9,18 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/pipeline"
 )
 
-// The corpus lives with the transducer it exists to pin; this test needs it for the
-// one stage the transducer cannot check.
 const corpusPath = "../phonikud/testdata/corpus.jsonl"
 
 // 5,012 items through a 300 MB model take minutes, so this walks a deterministic
 // sample by default. RG_FULL_CORPUS=1 checks all of them.
 const sampleSize = 200
 
-// TestDiacritizerCorpus covers the one stage the transducer's own test cannot,
-// because it runs a model. Argmax over identical token ids is stable, so this is
-// still exact: a mismatch means the tokenizer or reassembly is wrong, not weights.
+// TestDiacritizerCorpus covers the one stage the transducer's own test cannot. Argmax
+// over identical token ids is stable, so a mismatch means the tokenizer or the
+// reassembly is wrong, not the weights.
 func TestDiacritizerCorpus(t *testing.T) {
 	t.Parallel()
-	dir := corpustest.ModelsDir()
-	if _, err := os.Stat(filepath.Join(dir, pipeline.DiacritizerModel)); err != nil {
-		t.Skipf("no diacritizer in %s, set RG_MODELS_DIR: %v", dir, err)
-	}
-
-	d, err := diacritizer.New(t.Context(), filepath.Join(dir, pipeline.DiacritizerModel))
-	if err != nil {
-		t.Fatalf("loading diacritizer: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := d.Close(); err != nil {
-			t.Errorf("closing diacritizer: %v", err)
-		}
-	})
+	d := corpustest.Model(t, pipeline.DiacritizerModel, diacritizer.New)
 
 	items := corpustest.Load(t, corpusPath)
 	step := 1
@@ -96,17 +80,15 @@ func TestDoubledVowel(t *testing.T) {
 	}
 }
 
-// knownDoubledVowels are the items still flagged after NormalizeNiqqud. All three
-// are artifacts of a different shape from the vav one — a vocal shva beside a
-// segol, and an embedded "WiFi" falling through — so there is nothing to repair.
-// The count is pinned: a new one means new vocabulary to look at.
+// knownDoubledVowels are the items still flagged after NormalizeNiqqud — a different
+// shape from the vav artifact, so there is nothing to repair. The count is pinned: a
+// new one means new vocabulary to look at.
 var knownDoubledVowels = map[string]bool{
 	"איפה אני יכול למצוא רשת WiFi פתוחה ?": true,
 	"היא חבקה את התינוק לחזה.":             true,
 	"לך באיטיות, ואני אדביק אותך.":         true,
 }
 
-// The detector over the whole corpus. Needs no models: the IPA is recorded.
 func TestCorpusDoubledVowels(t *testing.T) {
 	t.Parallel()
 	items := corpustest.Load(t, corpusPath)

@@ -7,27 +7,24 @@
 package corpustest
 
 import (
-	"bufio"
+	"cmp"
+	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
-// Item is one row. IPAExpander is only present where phonikud's number-and-date
-// expander would have changed the result; this port skips it, so it is recorded
-// but never asserted on.
 type Item struct {
-	Text        string `json:"text"`
-	Raw         string `json:"raw"`
-	Vocalized   string `json:"vocalized"`
-	IPA         string `json:"ipa"`
-	RG          string `json:"rg"`
-	HebRG       string `json:"heb_rg"`
-	Latin       string `json:"latin"`
-	IPAExpander string `json:"ipa_exp,omitempty"`
+	Text      string `json:"text"`
+	Raw       string `json:"raw"`
+	Vocalized string `json:"vocalized"`
+	IPA       string `json:"ipa"`
+	RG        string `json:"rg"`
+	HebRG     string `json:"heb_rg"`
+	Latin     string `json:"latin"`
 }
 
-// Load reads the corpus at path.
 func Load(tb testing.TB, path string) []Item {
 	tb.Helper()
 	f, err := os.Open(path)
@@ -37,17 +34,12 @@ func Load(tb testing.TB, path string) []Item {
 	defer f.Close()
 
 	var items []Item
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
+	for dec := json.NewDecoder(f); dec.More(); {
 		var item Item
-		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
-			tb.Fatalf("decoding corpus line %d: %v", len(items)+1, err)
+		if err := dec.Decode(&item); err != nil {
+			tb.Fatalf("decoding corpus item %d: %v", len(items)+1, err)
 		}
 		items = append(items, item)
-	}
-	if err := scanner.Err(); err != nil {
-		tb.Fatalf("reading corpus: %v", err)
 	}
 	if len(items) == 0 {
 		tb.Fatal("corpus is empty")
@@ -56,9 +48,21 @@ func Load(tb testing.TB, path string) []Item {
 }
 
 // ModelsDir is where the checkpoints live; they are not in the repo.
-func ModelsDir() string {
-	if dir := os.Getenv("RG_MODELS_DIR"); dir != "" {
-		return dir
+func ModelsDir() string { return cmp.Or(os.Getenv("RG_MODELS_DIR"), "/models") }
+
+// Model opens file from ModelsDir, skipping the test when it is not there — the
+// checkpoints are a download, not a checkout — and closing it when the test ends.
+func Model[T interface{ Close() error }](tb testing.TB, file string, open func(context.Context, string) (T, error)) T {
+	tb.Helper()
+	dir := ModelsDir()
+	m, err := open(tb.Context(), filepath.Join(dir, file))
+	if err != nil {
+		tb.Skipf("no %s in %s, set RG_MODELS_DIR: %v", file, dir, err)
 	}
-	return "/models"
+	tb.Cleanup(func() {
+		if err := m.Close(); err != nil {
+			tb.Errorf("closing %s: %v", file, err)
+		}
+	})
+	return m
 }

@@ -59,7 +59,6 @@ func newLetter(char, diac string) letter {
 	return letter{char: normalize(char), allDiac: all, diac: plain.String()}
 }
 
-// String renders the letter back to text, marks and all.
 func (l letter) String() string { return l.char + l.allDiac }
 
 func getLetters(word string) []letter {

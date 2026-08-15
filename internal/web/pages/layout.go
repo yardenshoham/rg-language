@@ -10,7 +10,6 @@ import (
 	"maragu.dev/gomponents/html"
 )
 
-// Title is the site's name.
 const Title = "שפת הריש גימל"
 
 // Layout wraps page content in the shared shell. analytics is threaded in

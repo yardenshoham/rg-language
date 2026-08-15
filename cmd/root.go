@@ -19,7 +19,6 @@ func newRootCmd() *cobra.Command {
 	return rootCmd
 }
 
-// Execute runs the CLI.
 func Execute() {
 	// cobra already prints the error itself — SilenceErrors is not set.
 	if err := newRootCmd().Execute(); err != nil {

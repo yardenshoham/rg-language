@@ -22,23 +22,22 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/voice"
 )
 
-// Pinned by name so a build-time checksum mismatch is the only way a different
-// checkpoint gets in: the voice was chosen by human listening, and swapping it
-// silently would invalidate every verdict behind this project.
+// Pinned by name: the voice was chosen by human listening, so a build-time checksum
+// mismatch should be the only way another checkpoint gets in.
 const (
 	DiacritizerModel = "phonikud-1.0.onnx"
 	VoiceModel       = "matcha-he-en.onnx"
 )
 
-// Cache sizes, in megabytes. All three are bounded by bytes, not entries: entry
-// size follows what someone typed — a 500-rune request retains tens of kilobytes —
-// so a count-based bound would let unauthenticated traffic pin unbounded memory.
-// Ids are far smaller than audio, so an equal budget holds many more; running out
-// of them means 404s for links this process handed out.
+// Cache sizes, in bytes. All three are bounded by bytes, not entries: entry size
+// follows what someone typed — a 500-rune request retains tens of kilobytes — so a
+// count-based bound would let unauthenticated traffic pin unbounded memory. Ids are
+// far smaller than audio, so an equal budget holds many more; running out of them
+// means 404s for links this process handed out.
 const (
-	transformCacheMB = 64
-	audioIDCacheMB   = 64
-	defaultAudioMB   = 256
+	transformCacheBytes = 64 << 20
+	audioIDCacheBytes   = 64 << 20
+	defaultAudioBytes   = 256 << 20
 )
 
 // modelTimeout bounds waiting for and then holding the model slot. A sentence
@@ -48,19 +47,9 @@ const modelTimeout = 60 * time.Second
 // ErrUnknownAudio means the hash was never handed out, or has been evicted.
 var ErrUnknownAudio = errors.New("no audio for this hash")
 
-// resultCost is roughly what one cached Result retains.
-func resultCost(r Result) int64 {
-	cost := int64(len(r.Input) + len(r.Vocalized) + len(r.IPA) + len(r.RGIPA) + len(r.AudioHash))
-	for _, s := range r.Hebrew {
-		cost += int64(len(s.Text)) + 32
-	}
-	for _, word := range r.Syllables {
-		for _, s := range word {
-			cost += int64(len(s.Text)) + 32
-		}
-	}
-	return cost + 128
-}
+// resultCost bounds what one cached Result retains. Every field is derived from the
+// input, and over the whole corpus the total stays under 128 bytes per input byte.
+func resultCost(r Result) int64 { return int64(len(r.Input))*128 + 256 }
 
 // Result is everything the site shows for one piece of Hebrew.
 type Result struct {
@@ -75,7 +64,6 @@ type Result struct {
 	AudioHash string
 }
 
-// Unvocalized is the Hebrew rendering with the niqqud stripped.
 func (r Result) Unvocalized() []rg.Segment {
 	plain := make([]rg.Segment, 0, len(r.Hebrew))
 	for _, s := range r.Hebrew {
@@ -101,11 +89,9 @@ type Pipeline struct {
 	modelSlot    chan struct{}
 }
 
-func megabytes(mb int) int64 { return int64(mb) * 1024 * 1024 }
-
-// modelWork runs fn under the single model slot, on its own deadline: shared work
-// must not die because the request that started it went away — with singleflight
-// that would hand the cancellation to every request waiting on the same phrase.
+// modelWork runs fn under the single model slot, on its own deadline: with
+// singleflight, cancelling the request that started shared work would cancel it for
+// every waiter.
 func modelWork[V any](p *Pipeline, fn func() (V, error)) (V, error) {
 	select {
 	case p.modelSlot <- struct{}{}:
@@ -144,26 +130,19 @@ func cachedOnce[V any](ctx context.Context, group *singleflight.Group, cache *lr
 	}
 }
 
-// Options configures a Pipeline.
-type Options struct {
-	// ModelsDir holds the two .onnx files.
-	ModelsDir string
-	// AudioCacheMB bounds the audio held in memory. Zero picks a default.
-	AudioCacheMB int
-}
-
-// New loads both models. It takes a few seconds — most of the process's startup.
-func New(ctx context.Context, opts Options) (*Pipeline, error) {
-	audioMB := opts.AudioCacheMB
-	if audioMB <= 0 {
-		audioMB = defaultAudioMB
+// New loads both models from modelsDir, bounding cached audio to audioCacheMB (zero
+// picks a default). It takes a few seconds — most of the process's startup.
+func New(ctx context.Context, modelsDir string, audioCacheMB int) (*Pipeline, error) {
+	audioBytes := int64(audioCacheMB) << 20
+	if audioBytes <= 0 {
+		audioBytes = defaultAudioBytes
 	}
 
-	d, err := diacritizer.New(ctx, filepath.Join(opts.ModelsDir, DiacritizerModel))
+	d, err := diacritizer.New(ctx, filepath.Join(modelsDir, DiacritizerModel))
 	if err != nil {
 		return nil, err
 	}
-	v, err := voice.New(ctx, filepath.Join(opts.ModelsDir, VoiceModel))
+	v, err := voice.New(ctx, filepath.Join(modelsDir, VoiceModel))
 	if err != nil {
 		_ = d.Close()
 		return nil, err
@@ -172,11 +151,10 @@ func New(ctx context.Context, opts Options) (*Pipeline, error) {
 	return &Pipeline{
 		diacritizer: d,
 		voice:       v,
-		transforms:  newLRU(megabytes(transformCacheMB), resultCost),
-		audioIDs: newLRU(megabytes(audioIDCacheMB),
-			func(rgIPA string) int64 { return int64(len(rgIPA)) + 64 }),
-		audio:     newLRU(megabytes(audioMB), func(b []byte) int64 { return int64(len(b)) }),
-		modelSlot: make(chan struct{}, 1),
+		transforms:  newLRU(transformCacheBytes, resultCost),
+		audioIDs:    newLRU(audioIDCacheBytes, func(rgIPA string) int64 { return int64(len(rgIPA)) + 64 }),
+		audio:       newLRU(audioBytes, func(b []byte) int64 { return int64(len(b)) }),
+		modelSlot:   make(chan struct{}, 1),
 	}, nil
 }
 
@@ -190,11 +168,7 @@ func (p *Pipeline) Close() error {
 		// Only reachable if a unit of work is wedged; better than hanging.
 	}
 
-	closeErr := p.diacritizer.Close()
-	if err := p.voice.Close(); err != nil {
-		return err
-	}
-	return closeErr
+	return errors.Join(p.diacritizer.Close(), p.voice.Close())
 }
 
 // Transform renders Hebrew text as RG. Caching it saves the diacritizer call.
@@ -234,10 +208,9 @@ func audioHash(rgIPA string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-// Audio returns the WAV for a hash handed out by Transform, synthesizing it on
-// first request. The cache is a correctness feature, not just a speed one: the voice
-// samples a noise prior, so re-synthesis of the same phonemes runs the same length but
-// sounds audibly different.
+// Audio returns the WAV for a hash handed out by Transform, synthesizing it on first
+// request. The cache is a correctness feature, not just a speed one: the voice samples
+// a noise prior, so re-synthesis of the same phonemes sounds audibly different.
 func (p *Pipeline) Audio(ctx context.Context, hash string) ([]byte, error) {
 	// Ahead of the id lookup: a hot WAV's id is never refreshed, so it can age out
 	// of the id cache while the audio is still here.

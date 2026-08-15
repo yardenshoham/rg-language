@@ -11,8 +11,7 @@ import (
 )
 
 // newSayCmd transforms one phrase and optionally writes the audio, so the pipeline
-// can be checked from a terminal — including by ear, the only instrument that has
-// ever worked here.
+// can be checked by ear — the only instrument that has ever worked here.
 func newSayCmd() *cobra.Command {
 	var out string
 
@@ -22,7 +21,7 @@ func newSayCmd() *cobra.Command {
 		Example: `rg-language say "מה נשמע" --out hello.wav`,
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p, err := pipeline.New(cmd.Context(), pipeline.Options{ModelsDir: modelsDirDefault()})
+			p, err := pipeline.New(cmd.Context(), defaultModelsDir(), 0)
 			if err != nil {
 				return fmt.Errorf("loading models: %w", err)
 			}
@@ -35,7 +34,7 @@ func newSayCmd() *cobra.Command {
 
 			w := cmd.OutOrStdout()
 			fmt.Fprintf(w, "input      %s\n", result.Input)
-			writeRenderings(w, result.Vocalized, result.IPA, result.RGIPA)
+			newRow(result.Vocalized, result.IPA, result.RGIPA).write(w)
 			if out == "" {
 				return nil
 			}
