@@ -64,8 +64,14 @@ func New(ctx context.Context, modelPath string) (*Voice, error) {
 		return nil, err
 	}
 
+	options, err := onnx.SessionOptions()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = options.Destroy() }()
+
 	session, err := ort.NewDynamicAdvancedSession(modelPath,
-		[]string{"x", "x_lengths", "scales"}, []string{"wav", "wav_lengths"}, nil)
+		[]string{"x", "x_lengths", "scales"}, []string{"wav", "wav_lengths"}, options)
 	if err != nil {
 		return nil, fmt.Errorf("loading voice %s: %w", modelPath, err)
 	}

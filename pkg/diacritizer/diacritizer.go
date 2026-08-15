@@ -92,9 +92,15 @@ func New(ctx context.Context, modelPath string) (*Diacritizer, error) {
 		}
 	}
 
+	options, err := onnx.SessionOptions()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = options.Destroy() }()
+
 	session, err := ort.NewDynamicAdvancedSession(modelPath,
 		[]string{"input_ids", "attention_mask", "token_type_ids"},
-		[]string{"nikud_logits", "shin_logits", "additional_logits"}, nil)
+		[]string{"nikud_logits", "shin_logits", "additional_logits"}, options)
 	if err != nil {
 		return nil, fmt.Errorf("loading diacritizer %s: %w", modelPath, err)
 	}
