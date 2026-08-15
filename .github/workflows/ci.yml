@@ -1,0 +1,34 @@
+name: CI
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go mod tidy -diff
+      - run: go tool govulncheck ./...
+      # The fast suite: no ONNX models and no runtime library, and it still
+      # replays the whole corpus through everything below the diacritizer.
+      - run: go test -v ./...
+
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2

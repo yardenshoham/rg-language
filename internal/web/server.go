@@ -27,44 +27,29 @@ const maxInputRunes = 500
 
 // Config carries the server's optional settings. The zero value is a complete
 // site; everything here is off unless it is configured.
-type Config struct {
-	// PostHogKey enables PostHog analytics when set.
-	PostHogKey string
-	// PostHogHost is the ingestion host, defaulting to PostHog's EU cloud.
-	PostHogHost string
-	// PostHogUIHost is the dashboard host, needed only behind a reverse proxy.
-	PostHogUIHost string
-}
+type Config = pages.Analytics
 
-// Server is the HTTP server, middleware and all.
 type Server struct {
+	http.Handler
 	logger    *slog.Logger
 	pipeline  *pipeline.Pipeline
 	analytics pages.Analytics
-	handler   http.Handler
-}
-
-// ServeHTTP satisfies http.Handler.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.handler.ServeHTTP(w, r)
 }
 
 // NewServer registers all routes. The pipeline is loaded before the port opens, so
-// both models are resident by the time anything can reach these handlers — which
-// is also what makes Railway's health check honest.
+// both models are resident by the time anything can reach these handlers.
 func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server {
-	s := &Server{
-		logger:   logger,
-		pipeline: p,
-		analytics: pages.Analytics{
-			PostHogKey:    config.PostHogKey,
-			PostHogHost:   config.PostHogHost,
-			PostHogUIHost: config.PostHogUIHost,
-		},
-	}
+	s := &Server{logger: logger, pipeline: p, analytics: config}
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /static/", cacheAssets(http.FileServerFS(staticFiles)))
+	// An hour, not longer: asset URLs are not content-addressed and an embedded
+	// file has no mtime to revalidate against, so a redeploy's new CSS must not
+	// linger for days. They total about 60 KB, so re-fetching is cheap.
+	assets := http.FileServerFS(staticFiles)
+	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		assets.ServeHTTP(w, r)
+	})
 	mux.HandleFunc("GET /{$}", s.transformed("home page",
 		func(text string, result pipeline.Result) g.Node { return pages.Home(s.analytics, text, result) }))
 	// The fragment is body content, so it carries no layout and no analytics.
@@ -77,7 +62,7 @@ func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server
 	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
 
-	s.handler = s.instrument(mux)
+	s.Handler = s.instrument(mux)
 	return s
 }
 
@@ -118,9 +103,8 @@ func (s *Server) transformed(what string, page func(string, pipeline.Result) g.N
 			text = string(runes[:maxInputRunes])
 		}
 		// Keep the address bar in step with the box, so the URL is always
-		// shareable. htmx ignores this on a plain navigation, where it is already
-		// the URL. The bounded text is what goes in, so a shared link cannot ask
-		// for more than the box allowed.
+		// shareable. The bounded text is what goes in, so a shared link cannot
+		// ask for more than the box allowed.
 		if r.Header.Get("HX-Request") != "" {
 			shareable := "/"
 			if text != "" {
@@ -165,20 +149,8 @@ func (s *Server) handleAudio(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "audio/wav")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	// ServeContent, not Write, for the range requests: Safari probes with Range
-	// before playing anything, and seeking needs them everywhere. WAV barely
-	// compresses, so nothing gzips it.
+	// before playing anything, and seeking needs them everywhere.
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(wav))
-}
-
-// cacheAssets caches the embedded assets for an hour — not longer, because their
-// URLs are not content-addressed and an embedded file has no modification time to
-// revalidate against, so a redeploy's new CSS would take days to arrive. They total
-// about 60 KB, so re-fetching is cheap.
-func cacheAssets(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		next.ServeHTTP(w, r)
-	})
 }
 
 // instrument logs every request and turns a panic into a 500. Recovery runs before
@@ -192,12 +164,8 @@ func (s *Server) instrument(next http.Handler) http.Handler {
 				s.logger.Error("panic recovered", "error", err, "path", r.URL.Path)
 				http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
 			}
-			s.logger.Info("request",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"status", rw.statusCode,
-				"duration", time.Since(start).Round(time.Microsecond),
-			)
+			s.logger.Info("request", "method", r.Method, "path", r.URL.Path,
+				"status", rw.statusCode, "duration", time.Since(start).Round(time.Microsecond))
 		}()
 		next.ServeHTTP(rw, r)
 	})

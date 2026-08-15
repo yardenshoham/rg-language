@@ -44,7 +44,6 @@ func About(analytics Analytics) g.Node {
 	)
 }
 
-// credit is one row of the credits list: a link, then what it gave the project.
 func credit(href, name, rest string) g.Node {
 	return html.Li(html.A(html.Href(href), g.Text(name)), g.Text(rest))
 }

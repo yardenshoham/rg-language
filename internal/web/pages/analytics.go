@@ -8,20 +8,13 @@ import (
 )
 
 // Analytics is the optional PostHog configuration. The zero value renders no
-// script at all, which is the default everywhere: the site is complete without
-// it, and the tests and the browser suite run with it off.
+// script at all, which is the default everywhere.
 type Analytics struct {
-	// PostHogKey is the project API key. Empty means no analytics.
-	PostHogKey string
-	// PostHogHost is the ingestion host, defaulting to PostHog's EU cloud.
-	PostHogHost string
-	// PostHogUIHost is where the dashboard lives. It only matters when
-	// PostHogHost is a reverse proxy, so that links point back at PostHog.
-	PostHogUIHost string
+	PostHogKey    string // project API key; empty means no analytics
+	PostHogHost   string // ingestion host, defaulting to PostHog's EU cloud
+	PostHogUIHost string // dashboard host, so links point back when ingestion is a proxy
 }
 
-// defaultPostHogHost is PostHog's EU cloud, which is where this project's
-// project lives; a reverse proxy replaces it.
 const defaultPostHogHost = "https://eu.i.posthog.com"
 
 // posthogLoader is PostHog's own snippet, copied verbatim from the install page.

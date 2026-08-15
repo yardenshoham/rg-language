@@ -1,8 +1,7 @@
 // Package diacritizer adds niqqud to plain Hebrew with an ONNX BERT model.
 //
-// It is the pipeline's only non-deterministic step, deliberately: all the
-// ambiguity is quarantined here and everything downstream is string-to-string.
-// Where it guesses wrong, the fix is a lexicon entry, not a code change.
+// It is the pipeline's only non-deterministic step, deliberately: everything
+// downstream is string-to-string, and a wrong guess is fixed by a lexicon entry.
 package diacritizer
 
 import (
@@ -11,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -102,7 +102,6 @@ func New(ctx context.Context, modelPath string) (*Diacritizer, error) {
 		unk: vocab["[UNK]"], cls: vocab["[CLS]"], sep: vocab["[SEP]"]}, nil
 }
 
-// Close releases the model.
 func (d *Diacritizer) Close() error { return d.session.Destroy() }
 
 // AddDiacritics returns the text with niqqud, stress and vocal-shva marks.
@@ -133,18 +132,13 @@ func chunks(text string) []string {
 
 	var out []string
 	for start := 0; start < len(runes); {
-		end := min(start+maxChunkRunes, len(runes))
+		full := min(start+maxChunkRunes, len(runes))
+		end := full
 		for end > start && !breakable(end) {
 			end--
 		}
 		if end == start {
-			// A sentence longer than the window: cut it into windowfuls.
-			for end = start + maxChunkRunes; !breakable(end); {
-				end++
-			}
-			for ; end-start > maxChunkRunes; start += maxChunkRunes {
-				out = append(out, string(runes[start:start+maxChunkRunes]))
-			}
+			end = full // a sentence longer than the window: cut it at the window
 		}
 		out = append(out, string(runes[start:end]))
 		start = end
@@ -171,8 +165,7 @@ func isAllowed(r rune) bool {
 // combining marks — and reports whether the result is a single character in the
 // model's alphabet. The order matters: marks are dropped WITHOUT decomposing
 // first, so a precomposed ŭ keeps its breve and falls outside the alphabet.
-// Reversing that changes the token ids, and so the model's predictions. On Hebrew
-// with its niqqud already removed, all of this is the identity.
+// Reversing that changes the token ids, and so the model's predictions.
 func fold(r rune) (string, bool) {
 	var b strings.Builder
 	for _, c := range strings.ToLower(norm.NFKC.String(string(r))) {
@@ -189,14 +182,11 @@ func fold(r rune) (string, bool) {
 // one-to-one: a character the normalizer deletes gets no token, and a run outside
 // the model's alphabet becomes one unknown token.
 //
-// Known, accepted divergence from upstream: fold works per character rather than
-// over the whole string, so a compatibility expansion (the ﬁ ligature) splits, a
-// base letter plus a separate combining accent is not composed first as upstream
-// would, and an unrepresentable run containing a mark becomes two unknown tokens
-// where upstream makes one. None can lose or duplicate text — the round-trip test
-// covers that — so the only effect is on niqqud predicted around characters this
-// site is not for, and closing the gap needs position-alignment machinery no
-// Hebrew sentence would exercise.
+// Known, accepted divergence from upstream: fold works per character, so the ﬁ
+// ligature splits, a base letter plus a combining accent is not composed first, and
+// an unrepresentable run containing a mark becomes two unknown tokens where upstream
+// makes one. None can lose or duplicate text — the round-trip test covers that — so
+// the only effect is on niqqud around characters this site is not for.
 func (d *Diacritizer) tokenize(runes []rune) []token {
 	tokens := make([]token, 0, len(runes)+2)
 	tokens = append(tokens, token{id: d.cls})
@@ -325,12 +315,4 @@ func logits(values []ort.Value) ([]func(token int) []float32, error) {
 	return rows, nil
 }
 
-func argmax(row []float32) int {
-	best := 0
-	for i, v := range row {
-		if v > row[best] {
-			best = i
-		}
-	}
-	return best
-}
+func argmax(row []float32) int { return slices.Index(row, slices.Max(row)) }

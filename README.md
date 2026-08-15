@@ -115,9 +115,8 @@ makes links in the captured events point back at PostHog itself.
 go test ./...
 ```
 
-That covers the reference sets the project is defined by (8 for the transform,
-7 for the Hebrew rendering) and replays the whole differential corpus through
-the phonemizer, the transform and both renderings.
+That replays the whole differential corpus through the phonemizer, the transform
+and both renderings.
 
 The diacritizer test needs the models, and walks a 200-item sample by default:
 
@@ -125,17 +124,15 @@ The diacritizer test needs the models, and walks a 200-item sample by default:
 RG_MODELS_DIR=$PWD/debug/models RG_FULL_CORPUS=1 go test ./pkg/pipeline/
 ```
 
-Browser tests live in `e2e/` and drive the real site with Playwright — the eight
-reference sentences end to end, RTL and the font, the page working with
-JavaScript off, and the audio actually decoding:
+Browser tests live in `e2e/` and drive the real site with Playwright, including
+the eight reference sentences end to end:
 
 ```bash
 cd e2e && npm install && npx playwright install chromium   # once
 make e2e
 ```
 
-`node e2e/shot.mjs --text "מה נשמע" --theme dark` screenshots a page, which is
-the quick way to check how something looks.
+`node e2e/shot.mjs --text "מה נשמע" --theme dark` screenshots a page.
 
 There is deliberately **no automated audio-quality test**. One was built and
 failed its validation gate: the transcriber had a 25–30% phoneme error rate on

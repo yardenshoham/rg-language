@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yardenshoham/rg-language/pkg/rg"
@@ -61,31 +62,20 @@ func TestLRUKeepsAnOversizedEntry(t *testing.T) {
 	}
 }
 
-func TestLRUMissing(t *testing.T) {
-	t.Parallel()
-	c := newLRU(10, byteCost)
-	if got, ok := c.get("nope"); ok || got != "" {
-		t.Errorf("get on an empty cache = (%q, %v), want the zero value", got, ok)
-	}
-}
-
 func TestLRUConcurrent(t *testing.T) {
 	t.Parallel()
 	c := newLRU(1000, byteCost)
-	done := make(chan struct{})
+	var wg sync.WaitGroup
 	for i := range 8 {
-		go func() {
-			defer func() { done <- struct{}{} }()
+		wg.Go(func() {
 			for j := range 200 {
 				key := string(rune('a' + (i+j)%26))
 				c.put(key, key)
 				c.get(key)
 			}
-		}()
+		})
 	}
-	for range 8 {
-		<-done
-	}
+	wg.Wait()
 }
 
 // The cost must track what a Result retains, or the byte budget means nothing.

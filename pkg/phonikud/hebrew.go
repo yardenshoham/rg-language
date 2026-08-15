@@ -1,6 +1,9 @@
 package phonikud
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // The finite-state transducer, ported from phonikud's hebrew.py. It holds no state
 // beyond a three-letter window — previous, current, next — which is what makes
@@ -202,15 +205,7 @@ func sortStress(phonemes []string) []string {
 // keepPhonemes drops anything not made entirely of output characters, which is how
 // Hebrew letters, digits and quotes leave the stream.
 func keepPhonemes(phonemes []string) []string {
-	kept := phonemes[:0]
-	for _, p := range phonemes {
-		if p == "" {
-			continue
-		}
-		if strings.ContainsFunc(p, func(r rune) bool { return !setPhonemes[r] }) {
-			continue
-		}
-		kept = append(kept, p)
-	}
-	return kept
+	return slices.DeleteFunc(phonemes, func(p string) bool {
+		return p == "" || strings.ContainsFunc(p, func(r rune) bool { return !setPhonemes[r] })
+	})
 }

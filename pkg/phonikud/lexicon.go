@@ -137,11 +137,6 @@ var setPhonemes = func() map[rune]bool {
 	return set
 }()
 
-// isPunctuation reports whether r is punctuation the phonemizer preserves.
 func isPunctuation(r rune) bool {
-	switch r {
-	case '.', ',', '!', '?', ' ':
-		return true
-	}
-	return false
+	return r == '.' || r == ',' || r == '!' || r == '?' || r == ' '
 }

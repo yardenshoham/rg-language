@@ -20,10 +20,9 @@ var (
 	clusterPattern = regexp.MustCompile(`(?s)(.)([` + markClass + `]*)`)
 	markPattern    = regexp.MustCompile(`[` + markClass + `]`)
 
-	// lexicon pins the niqqud of words the diacritizer gets wrong. Overriding at
-	// the niqqud level, not the IPA level, keeps the phonemes, the transform and
-	// the Hebrew rendering on the normal path. This is the intended fix for every
-	// future diacritizer error; it is baked in and changed by redeploying.
+	// lexicon pins the niqqud of words the diacritizer gets wrong — the intended fix
+	// for every future one, baked in and changed by redeploying. Overriding here and
+	// not at the IPA level keeps every later stage on the normal path.
 	lexicon = func() map[string]string {
 		var entries map[string]string
 		if err := json.Unmarshal(lexiconJSON, &entries); err != nil {
@@ -63,12 +62,11 @@ func NormalizeNiqqud(vocalized string) string {
 		if !strings.ContainsAny(next[2], string([]rune{dagesh, holam, vavHolam})) {
 			continue
 		}
-		for _, duplicate := range []rune{qubuts, holam} {
-			if at := strings.IndexRune(cur[2], duplicate); at >= 0 {
-				clusters[i][2] = cur[2][:at] + cur[2][at+len(string(duplicate)):]
-				break
-			}
+		marks := strings.Replace(cur[2], string(qubuts), "", 1)
+		if marks == cur[2] {
+			marks = strings.Replace(cur[2], string(holam), "", 1)
 		}
+		clusters[i][2] = marks
 	}
 
 	var b strings.Builder
