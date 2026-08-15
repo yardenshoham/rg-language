@@ -98,6 +98,16 @@ docker run -p 25256:25256 rg-language
 | `RG_MODELS_DIR`      | `--models`         | `/models`                           | Directory holding the two `.onnx` files        |
 | `RG_AUDIO_CACHE_MB`  | `--audio-cache-mb` | `256`                               | Synthesized audio kept in memory               |
 | `ONNXRUNTIME_LIB`    |                    | `/usr/local/lib/libonnxruntime.so`  | ONNX Runtime shared library                    |
+| `RG_POSTHOG_KEY`     | `--posthog-key`    |                                     | PostHog project API key; enables analytics     |
+| `RG_POSTHOG_HOST`    | `--posthog-host`   | `https://eu.i.posthog.com`          | PostHog ingestion host                         |
+| `RG_POSTHOG_UI_HOST` | `--posthog-ui-host`|                                     | PostHog dashboard host, when ingestion is proxied |
+
+## Analytics
+
+Off unless `RG_POSTHOG_KEY` (or `--posthog-key`) is set — with no key the pages
+carry no tracking script at all. `RG_POSTHOG_HOST` points ingestion somewhere
+else, typically a reverse proxy; when it does, `RG_POSTHOG_UI_HOST` is what
+makes links in the captured events point back at PostHog itself.
 
 ## Tests
 

@@ -6,8 +6,8 @@ import (
 )
 
 // About explains the rule and is honest about what the voice cannot do.
-func About() g.Node {
-	return Layout("מה זה — "+Title, "/about",
+func About(analytics Analytics) g.Node {
+	return Layout(analytics, "מה זה — "+Title, "/about",
 		html.H2(g.Text("הכלל")),
 		html.P(g.Text("אחרי כל תנועה נכנס רג ואחריו עוד עותק של אותה תנועה. זהו. שָׁלוֹם הופך ל־שָׁרְגָלוֹרְגוֹם, כי אחרי הָ נכנס רְגָ ואחרי לוֹ נכנס רְגוֹ.")),
 		html.P(g.Text("מסתבר שלא צריך לחלק את המילה להברות בשביל זה. ההברה יכולה להיחתך לפני העיצור או אחריו, והתוצאה יוצאת אותו דבר — אז מספיק לדעת איפה התנועות.")),
