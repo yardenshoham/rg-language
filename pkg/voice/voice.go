@@ -19,33 +19,30 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/onnx"
 )
 
-// Synthesis parameters. A blind eight-voice round — the incumbent Piper checkpoint,
-// three other Hebrew Piper voices, Kokoro, Mixer-TTS and Microsoft's he-IL voice, all
-// loudness-matched and lettered — was rendered under exactly these, and this voice was
-// the only one rated good on every sentence. They are the settings that were judged,
-// not the checkpoint's defaults, so changing either needs a new listening round.
+// Synthesis parameters, judged rather than defaulted: a blind, loudness-matched round of
+// this voice against Kokoro, Mixer-TTS, Microsoft's he-IL and four Piper checkpoints was
+// rendered under exactly these, and this voice alone was rated good on every sentence, so
+// changing either needs a new listening round.
 const (
 	temperature = 0.667
 	lengthScale = 0.70
 )
 
-// Fingerprint identifies the voice and the settings above, so audio URLs change if any
-// of them do.
+// Fingerprint covers the voice and every setting here, so audio URLs change if one does.
 const Fingerprint = "matcha-t0.667-l0.70-tail120"
 
 // Appended to every phoneme string before synthesis. Measured on the previous voice:
 // residual energy in the final 25 ms frame dropped 61% over a 21-word battery — the
 // model stopped ending clips mid-sound — and two human verdicts flipped from bad to ok.
-// The trailing silence guards against players clipping the last samples.
+// The silence guards against players clipping the last samples.
 const (
 	tailPhonemes  = " ."
 	tailSilenceMS = 120
 )
 
-// blank is Matcha's pad symbol, id 0. It goes before, between and after every phoneme:
-// the model was trained on that interleaving, and a checkpoint trained without it turns
-// into fluent babble at more than twice the right length when given it, so this is not
-// a detail that can be carried over between voices by assumption.
+// blank is Matcha's pad symbol, id 0, and goes before, between and after every phoneme:
+// the model was trained on that interleaving; one trained without it, fed it, babbles at
+// more than twice the right length, so do not assume it carries to another voice.
 const blank = 0
 
 // Voice is a loaded synthesis model. It is safe for concurrent use.
@@ -70,9 +67,8 @@ func New(ctx context.Context, modelPath string) (*Voice, error) {
 	return v, nil
 }
 
-// readMetadata takes the symbol table and the sample rate from the checkpoint, which
-// is why this package ships no config file: a table carried by the checkpoint it was
-// trained with cannot drift apart from it.
+// readMetadata takes the symbol table and sample rate from the checkpoint rather than a
+// config file: a table shipped with the checkpoint cannot drift apart from it.
 func (v *Voice) readMetadata() error {
 	meta, err := v.session.GetModelMetadata()
 	if err != nil {
@@ -89,8 +85,7 @@ func (v *Voice) readMetadata() error {
 	}
 	v.ids = make(map[rune]int64, len(symbols))
 	for id, symbol := range symbols {
-		// Every symbol in the table is a single rune; anything else could not be
-		// looked up by the rune-at-a-time walk in phonemeIDs anyway.
+		// A multi-rune symbol could never be found by phonemeIDs's rune-at-a-time walk.
 		if runes := []rune(symbol); len(runes) == 1 {
 			v.ids[runes[0]] = int64(id)
 		}

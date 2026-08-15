@@ -9,8 +9,7 @@ import (
 )
 
 var (
-	// A letter and its stacked marks, so they can be ordered canonically — two
-	// spellings of one vowel must not give two results.
+	// A letter and its stacked marks, sorted so one vowel has only one spelling.
 	sortDiacriticsRe = regexp.MustCompile(`\p{L}\p{M}+`)
 
 	// deduplicate folds the Hebrew-specific punctuation onto its ASCII twin.
@@ -40,8 +39,7 @@ func normalize(text string) string {
 }
 
 // letter is one letter with its stacked marks. allDiac keeps every mark; diac
-// drops phonikud's three extra ones, so a rule asking "does this letter have a
-// vowel" is not fooled by a stress mark.
+// drops phonikud's three extra ones, so "has a vowel?" is not fooled by stress.
 type letter struct {
 	char    string
 	allDiac string
@@ -156,8 +154,7 @@ func addMilraHatama(word string) string {
 	return strings.Join(syllables, "")
 }
 
-// sortHatama moves stress off a letter carrying masora: it is not pronounced, so
-// it cannot carry the stress.
+// sortHatama moves stress off a letter carrying masora, which is not pronounced.
 func sortHatama(letters []letter) []letter {
 	for i := range len(letters) - 1 {
 		diacs := []rune(letters[i].allDiac)

@@ -10,14 +10,9 @@ import (
 	"github.com/yardenshoham/rg-language/internal/web"
 )
 
-// get serves path with no models loaded; headers are name, value pairs. A recorder
-// rather than a real listener, so the whole suite needs no ports and no bodies to close.
-func get(t *testing.T, path string, headers ...string) *httptest.ResponseRecorder {
-	t.Helper()
-	return getWith(t, web.Config{}, path, headers...)
-}
-
-func getWith(t *testing.T, config web.Config, path string, headers ...string) *httptest.ResponseRecorder {
+// get serves path under config with no models loaded; headers are name, value pairs. A
+// recorder rather than a real listener, so the suite needs no ports and no bodies to close.
+func get(t *testing.T, config web.Config, path string, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	for i := 0; i < len(headers); i += 2 {
@@ -30,7 +25,7 @@ func getWith(t *testing.T, config web.Config, path string, headers ...string) *h
 
 func TestHealth(t *testing.T) {
 	t.Parallel()
-	rec := get(t, "/health")
+	rec := get(t, web.Config{}, "/health")
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
 	}
@@ -42,7 +37,7 @@ func TestHealth(t *testing.T) {
 // Hebrew is mojibake unless the charset is in both header and document.
 func TestHomeIsUTF8Hebrew(t *testing.T) {
 	t.Parallel()
-	rec := get(t, "/")
+	rec := get(t, web.Config{}, "/")
 	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
 		t.Errorf("Content-Type = %q", got)
 	}
@@ -65,7 +60,7 @@ func TestHomeIsUTF8Hebrew(t *testing.T) {
 func TestEmptyTransformClearsTheResult(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"/transform?text=", "/transform", "/transform?text=%20%20"} {
-		rec := get(t, path)
+		rec := get(t, web.Config{}, path)
 		if rec.Code != http.StatusOK {
 			t.Errorf("GET %s: status = %d, want 200", path, rec.Code)
 		}
@@ -79,88 +74,70 @@ func TestEmptyTransformClearsTheResult(t *testing.T) {
 // response says what it should be. A plain navigation is already at its URL.
 func TestHtmxKeepsTheURLShareable(t *testing.T) {
 	t.Parallel()
-	if got := get(t, "/transform?text=%20%20", "HX-Request", "true").Header().Get("HX-Replace-Url"); got != "/" {
+	if got := get(t, web.Config{}, "/transform?text=%20%20", "HX-Request", "true").Header().Get("HX-Replace-Url"); got != "/" {
 		t.Errorf("HX-Replace-Url = %q, want %q", got, "/")
 	}
-	if got := get(t, "/transform?text=").Header().Get("HX-Replace-Url"); got != "" {
+	if got := get(t, web.Config{}, "/transform?text=").Header().Get("HX-Replace-Url"); got != "" {
 		t.Errorf("HX-Replace-Url = %q on a non-htmx request, want none", got)
 	}
 }
 
-func TestAudioNeedsTheWavSuffix(t *testing.T) {
+// Every fixed route answers, assets included: they are served from the binary because
+// a CDN is one more thing to break.
+func TestRoutes(t *testing.T) {
 	t.Parallel()
-	if rec := get(t, "/audio/deadbeef"); rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", rec.Code)
-	}
-}
-
-func TestAbout(t *testing.T) {
-	t.Parallel()
-	rec := get(t, "/about")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if page := rec.Body.String(); !strings.Contains(page, "הכלל") {
-		t.Error("about page does not explain the rule")
+	for _, tt := range []struct {
+		path, contains string
+		status         int
+	}{
+		{"/about", "הכלל", http.StatusOK},            // the about page explains the rule
+		{"/audio/deadbeef", "", http.StatusNotFound}, // the .wav suffix is required
+		{"/static/app.css", "", http.StatusOK},
+		{"/static/htmx.min.js", "", http.StatusOK},
+		{"/static/favicon.svg", "", http.StatusOK},
+		{"/static/fonts/noto-sans-hebrew-400.woff2", "", http.StatusOK},
+		{"/static/fonts/noto-sans-hebrew-600.woff2", "", http.StatusOK},
+	} {
+		rec := get(t, web.Config{}, tt.path)
+		if rec.Code != tt.status {
+			t.Errorf("GET %s: status = %d, want %d", tt.path, rec.Code, tt.status)
+		}
+		if !strings.Contains(rec.Body.String(), tt.contains) {
+			t.Errorf("GET %s is missing %q", tt.path, tt.contains)
+		}
 	}
 }
 
 // Analytics are opt-in, and each server answers with its own configuration.
 func TestPostHogIsOptIn(t *testing.T) {
 	t.Parallel()
-
 	for _, path := range []string{"/", "/about"} {
-		if page := get(t, path).Body.String(); strings.Contains(page, "posthog") {
+		if page := get(t, web.Config{}, path).Body.String(); strings.Contains(page, "posthog") {
 			t.Errorf("%s mentions posthog with no key configured", path)
 		}
 	}
 
-	t.Run("configured", func(t *testing.T) {
-		t.Parallel()
-		page := getWith(t, web.Config{
-			PostHogKey:    "phc_test",
-			PostHogHost:   "https://m.example.com",
-			PostHogUIHost: "https://eu.posthog.com",
-		}, "/").Body.String()
-		want := `posthog.init("phc_test",{api_host:"https://m.example.com",ui_host:"https://eu.posthog.com",` +
-			`defaults:'2026-05-30',person_profiles:'identified_only'})`
-		if !strings.Contains(page, want) {
-			t.Errorf("home page is missing %q", want)
-		}
-	})
+	page := get(t, web.Config{
+		PostHogKey:    "phc_test",
+		PostHogHost:   "https://m.example.com",
+		PostHogUIHost: "https://eu.posthog.com",
+	}, "/").Body.String()
+	want := `posthog.init("phc_test",{api_host:"https://m.example.com",ui_host:"https://eu.posthog.com",` +
+		`defaults:'2026-05-30',person_profiles:'identified_only'})`
+	if !strings.Contains(page, want) {
+		t.Errorf("home page is missing %q", want)
+	}
 
 	// The fragment htmx swaps in is body content: a second copy of the loader
 	// there would re-init PostHog on every keystroke.
-	t.Run("fragment", func(t *testing.T) {
-		t.Parallel()
-		if fragment := getWith(t, web.Config{PostHogKey: "phc_test"}, "/transform?text=").Body.String(); strings.Contains(fragment, "posthog") {
-			t.Error("result fragment carries the analytics script")
-		}
-	})
+	if fragment := get(t, web.Config{PostHogKey: "phc_test"}, "/transform?text=").Body.String(); strings.Contains(fragment, "posthog") {
+		t.Error("result fragment carries the analytics script")
+	}
 
 	// Without an explicit host the snippet still needs one, or it has nowhere to
 	// send events and no assets host to derive.
-	t.Run("default host", func(t *testing.T) {
-		t.Parallel()
-		page := getWith(t, web.Config{PostHogKey: "phc_test"}, "/about").Body.String()
-		if !strings.Contains(page, `posthog.init("phc_test",{api_host:"https://eu.i.posthog.com",defaults:`) {
-			t.Error("about page does not fall back to the EU cloud host")
-		}
-	})
-}
-
-// Served from the binary: a CDN is one more thing to break.
-func TestStaticAssets(t *testing.T) {
-	t.Parallel()
-	for _, path := range []string{
-		"/static/app.css",
-		"/static/htmx.min.js",
-		"/static/favicon.svg",
-		"/static/fonts/noto-sans-hebrew-400.woff2",
-		"/static/fonts/noto-sans-hebrew-600.woff2",
-	} {
-		if rec := get(t, path); rec.Code != http.StatusOK {
-			t.Errorf("GET %s: status = %d, want 200", path, rec.Code)
-		}
+	page = get(t, web.Config{PostHogKey: "phc_test"}, "/about").Body.String()
+	if !strings.Contains(page, `posthog.init("phc_test",{api_host:"https://eu.i.posthog.com",defaults:`) {
+		t.Error("about page does not fall back to the EU cloud host")
 	}
 }

@@ -20,18 +20,13 @@ func TestCorpus(t *testing.T) {
 	items := corpustest.Load(t, corpusPath)
 
 	stages := []struct {
-		name string
-		want func(item) string
-		got  func(item) string
+		name  string
+		check func(item) (got, want string)
 	}{
-		{"phonemize", func(i item) string { return i.IPA },
-			func(i item) string { return phonikud.Phonemize(i.Vocalized) }},
-		{"transform", func(i item) string { return i.RG },
-			func(i item) string { return rg.Transform(i.IPA, rg.StressFirst) }},
-		{"hebrew", func(i item) string { return i.HebRG },
-			func(i item) string { return heb.RG(i.Vocalized) }},
-		{"latin", func(i item) string { return i.Latin },
-			func(i item) string { return heb.Latin(i.RG) }},
+		{"phonemize", func(i item) (string, string) { return phonikud.Phonemize(i.Vocalized), i.IPA }},
+		{"transform", func(i item) (string, string) { return rg.Transform(i.IPA, rg.StressFirst), i.RG }},
+		{"hebrew", func(i item) (string, string) { return heb.RG(i.Vocalized), i.HebRG }},
+		{"latin", func(i item) (string, string) { return heb.Latin(i.RG), i.Latin }},
 	}
 
 	for _, stage := range stages {
@@ -39,7 +34,7 @@ func TestCorpus(t *testing.T) {
 			t.Parallel()
 			mismatches := 0
 			for _, item := range items {
-				got, want := stage.got(item), stage.want(item)
+				got, want := stage.check(item)
 				if got == want {
 					continue
 				}

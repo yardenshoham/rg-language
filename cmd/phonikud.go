@@ -25,20 +25,13 @@ type row struct {
 }
 
 func newRow(vocalized, ipa, rgIPA string) row {
-	return row{
-		Vocalized: vocalized, IPA: ipa, RG: rgIPA, HebRG: heb.RG(vocalized),
-		Latin: heb.Latin(rgIPA), Doubled: pipeline.DoubledVowel(ipa),
-	}
+	return row{Vocalized: vocalized, IPA: ipa, RG: rgIPA, HebRG: heb.RG(vocalized), Latin: heb.Latin(rgIPA), Doubled: pipeline.DoubledVowel(ipa)}
 }
 
 // write prints the block both `phonikud` and `say` show.
 func (r row) write(w io.Writer) {
-	fmt.Fprintf(w, "niqqud     %s\n", r.Vocalized)
-	fmt.Fprintf(w, "ipa        %s\n", r.IPA)
-	fmt.Fprintf(w, "rg ipa     %s\n", r.RG)
-	fmt.Fprintf(w, "rg         %s\n", heb.StripMarks(r.HebRG))
-	fmt.Fprintf(w, "rg niqqud  %s\n", r.HebRG)
-	fmt.Fprintf(w, "rg latin   %s\n", r.Latin)
+	fmt.Fprintf(w, "niqqud     %s\nipa        %s\nrg ipa     %s\nrg         %s\nrg niqqud  %s\nrg latin   %s\n",
+		r.Vocalized, r.IPA, r.RG, heb.StripMarks(r.HebRG), r.HebRG, r.Latin)
 	if r.Doubled {
 		fmt.Fprintf(w, "warning    two identical adjacent vowels, which real Hebrew does not produce\n")
 	}
@@ -87,12 +80,10 @@ func newPhonikudCmd() *cobra.Command {
 			scanner := bufio.NewScanner(cmd.InOrStdin())
 			scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 			for scanner.Scan() {
-				line := strings.TrimSpace(scanner.Text())
-				if line == "" {
-					continue
-				}
-				if err := run(line); err != nil {
-					return err
+				if line := strings.TrimSpace(scanner.Text()); line != "" {
+					if err := run(line); err != nil {
+						return err
+					}
 				}
 			}
 			return scanner.Err()

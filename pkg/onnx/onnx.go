@@ -31,14 +31,9 @@ var initOnce = sync.OnceValue(func() error {
 // Session loads a model, initializing the runtime on the first call. The options are
 // only read while the session is created, so destroying them here is safe.
 //
-// The only setting is the thread count, and it exists because ONNX Runtime sizes its
-// intra-op pool from the machine's core count, which in a container is the host's,
-// not the quota's. On an 8-CPU Railway instance of a much larger host that means
-// dozens of threads contending for 8 CPUs, and they spin before they block: measured
-// under a 2-CPU quota, synthesis took 5-7x longer than the same work with the pool
-// sized to the quota. GOMAXPROCS is the quota — Go reads the cgroup, so this stays
-// correct wherever it runs, and on a bare machine it is just the core count, which is
-// what the default would have picked anyway.
+// The one setting is the intra-op thread count: ONNX Runtime sizes that pool from the
+// host's core count, not the container's quota, and the surplus threads spin before they
+// block — under a 2-CPU quota that measured 5-7x slower. GOMAXPROCS reads the cgroup.
 func Session(ctx context.Context, modelPath string, inputs, outputs []string) (*ort.DynamicAdvancedSession, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

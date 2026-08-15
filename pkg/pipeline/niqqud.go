@@ -14,9 +14,8 @@ const (
 	dagesh   = '\u05bc'
 )
 
-// lexicon pins the niqqud of words the diacritizer gets wrong — the intended fix for
-// every future one, baked in and changed by redeploying. Overriding here and not at
-// the IPA level keeps every later stage on the normal path.
+// lexicon pins the niqqud of words the diacritizer gets wrong — the fix for every future
+// one, baked in. Overriding here and not at the IPA level keeps later stages normal.
 var lexicon = map[string]string{
 	"חכמה": "חׇכְמָה",
 	"שוק":  "שׁוּק",
@@ -24,8 +23,7 @@ var lexicon = map[string]string{
 	"בית":  "בַּיִת",
 }
 
-// isMark reports the marks phonikud recognises: niqqud, ole, masora, the prefix bar,
-// the geresh.
+// isMark reports the marks phonikud recognises: niqqud, ole, masora, prefix bar, geresh.
 func isMark(r rune) bool {
 	return r >= '\u05b0' && r <= '\u05c7' || strings.ContainsRune("\u05ab\u05af|'", r)
 }
@@ -34,12 +32,10 @@ func isHebrewLetter(r rune) bool { return r >= 'א' && r <= 'ת' }
 
 func carriesVowel(r rune) bool { return r == dagesh || r == holam || r == vavHolam }
 
-// NormalizeNiqqud repairs a diacritizer artifact that counts one vowel twice.
-//
-// phonikud reads ו+dagesh as shuruk /u/ and ו+holam as holam male /o/, so the vav
-// carries the vowel. When the diacritizer also marks the consonant before it, the
-// vowel is emitted twice: ערוגה -> ʔaʁuuɡa, אורז -> ʔooʁez. The vav's mark is the
-// correct one, so the redundant one is dropped — restoring the standard spelling.
+// NormalizeNiqqud repairs a diacritizer artifact that counts one vowel twice: phonikud
+// reads ו+dagesh as /u/ and ו+holam as /o/, so marking the consonant before the vav too
+// emits the vowel twice (ערוגה -> ʔaʁuuɡa). The vav's mark is the correct one, so the
+// redundant one is dropped.
 func NormalizeNiqqud(vocalized string) string {
 	runes := []rune(vocalized)
 	prev := -1 // head of the previous letter-plus-marks cluster
@@ -74,9 +70,8 @@ func ApplyLexicon(vocalized string) string {
 	return strings.Join(words, " ")
 }
 
-// DoubledVowel reports two identical adjacent vowels, which real Hebrew essentially
-// never produces — the hedge matters, since the corpus test pins three legitimate
-// hits. The detector for the bug NormalizeNiqqud repairs: run it over new vocabulary.
+// DoubledVowel detects the bug NormalizeNiqqud repairs: two identical adjacent vowels,
+// which real Hebrew essentially never produces — though the corpus pins three that do.
 func DoubledVowel(ipa string) bool {
 	var prev rune
 	for _, r := range ipa {

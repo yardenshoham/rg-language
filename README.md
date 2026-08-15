@@ -34,22 +34,15 @@ string-to-string code, pinned byte-for-byte by a 5,012-item corpus in
 
 ## Quick start
 
-The models are not in the repo — they are 439 MB — so fetch them once:
+The models are not in the repo — they are 439 MB. `make run` fetches them and serves
+the site on <http://localhost:25256>. Spelled out, that is:
 
 ```bash
-make models
-make onnxruntime
-```
-
-Then:
-
-```bash
+make models onnxruntime
 export ONNXRUNTIME_LIB=$PWD/debug/onnxruntime/lib/libonnxruntime.so
 export RG_MODELS_DIR=$PWD/debug/models
 go run . web --addr :25256
 ```
-
-Open <http://localhost:25256>.
 
 ### Without the models
 
@@ -98,16 +91,9 @@ docker run -p 25256:25256 rg-language
 | `RG_MODELS_DIR`      | `--models`         | `/models`                           | Directory holding the two `.onnx` files        |
 | `RG_AUDIO_CACHE_MB`  | `--audio-cache-mb` | `256`                               | Synthesized audio kept in memory               |
 | `ONNXRUNTIME_LIB`    |                    | `/usr/local/lib/libonnxruntime.so`  | ONNX Runtime shared library                    |
-| `RG_POSTHOG_KEY`     | `--posthog-key`    |                                     | PostHog project API key; enables analytics     |
-| `RG_POSTHOG_HOST`    | `--posthog-host`   | `https://eu.i.posthog.com`          | PostHog ingestion host                         |
-| `RG_POSTHOG_UI_HOST` | `--posthog-ui-host`|                                     | PostHog dashboard host, when ingestion is proxied |
-
-## Analytics
-
-Off unless `RG_POSTHOG_KEY` (or `--posthog-key`) is set — with no key the pages
-carry no tracking script at all. `RG_POSTHOG_HOST` points ingestion somewhere
-else, typically a reverse proxy; when it does, `RG_POSTHOG_UI_HOST` is what
-makes links in the captured events point back at PostHog itself.
+| `RG_POSTHOG_KEY`     | `--posthog-key`    |                                     | PostHog project API key; with none, the pages carry no tracking script at all |
+| `RG_POSTHOG_HOST`    | `--posthog-host`   | `https://eu.i.posthog.com`          | PostHog ingestion host; override to send ingestion through a reverse proxy |
+| `RG_POSTHOG_UI_HOST` | `--posthog-ui-host`|                                     | PostHog dashboard host, so links in captured events point back when ingestion is proxied |
 
 ## Tests
 

@@ -1,7 +1,5 @@
-// Package diacritizer adds niqqud to plain Hebrew with an ONNX BERT model.
-//
-// It is the pipeline's only non-deterministic step, deliberately: everything
-// downstream is string-to-string, and a wrong guess is fixed by a lexicon entry.
+// Package diacritizer adds niqqud to plain Hebrew with an ONNX BERT model. It is the
+// pipeline's only non-deterministic step, by design: a wrong guess is fixed in the lexicon.
 package diacritizer
 
 import (
@@ -167,11 +165,9 @@ func fold(r rune) (string, bool) {
 // tokenize turns the sentence into one token per character, except that a deleted
 // character gets no token and an unrepresentable run becomes one unknown token.
 //
-// Known, accepted divergence from upstream: fold works per character, so the ﬁ
-// ligature splits, a base letter plus a combining accent is not composed first, and
-// an unrepresentable run containing a mark becomes two unknown tokens where upstream
-// makes one. None can lose or duplicate text — the round-trip test covers that — so
-// the only effect is on niqqud around characters this site is not for.
+// Accepted divergence from upstream: fold works per character, so ligatures split and a
+// run containing a mark becomes two unknown tokens. The round-trip test proves no text is
+// lost; only niqqud around characters this site is not for can differ.
 func (d *Diacritizer) tokenize(runes []rune) []token {
 	tokens := make([]token, 0, len(runes)+2)
 	tokens = append(tokens, token{id: d.cls})
@@ -285,11 +281,11 @@ func logits(values []ort.Value) ([]func(token int) []float32, error) {
 	for i, value := range values {
 		tensor, ok := value.(*ort.Tensor[float32])
 		if !ok {
-			return nil, fmt.Errorf("diacritizer returned %T, want a float32 tensor", value)
+			return nil, fmt.Errorf("diacritizer output %d is %T, want a float32 tensor", i, value)
 		}
 		shape := tensor.GetShape()
 		if len(shape) != 3 {
-			return nil, fmt.Errorf("diacritizer output has shape %v, want three dimensions", shape)
+			return nil, fmt.Errorf("diacritizer output %d has shape %v, want three dimensions", i, shape)
 		}
 		data, classes := tensor.GetData(), int(shape[2])
 		rows[i] = func(token int) []float32 { return data[token*classes : (token+1)*classes] }

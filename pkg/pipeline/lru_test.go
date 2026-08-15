@@ -30,6 +30,13 @@ func TestLRUEvictsByCost(t *testing.T) {
 			t.Errorf("%s should have survived", key)
 		}
 	}
+
+	// An oversized entry must still be readable once, or a long sentence would be
+	// re-synthesized on every request.
+	c.put("big", strings.Repeat("x", 100))
+	if _, ok := c.get("big"); !ok {
+		t.Error("an entry bigger than the budget was evicted immediately")
+	}
 }
 
 // Overwriting must adjust the running total, not add to it, or the cache starves.
@@ -46,18 +53,6 @@ func TestLRUOverwriteAdjustsCost(t *testing.T) {
 	}
 	if c.cost > 11 {
 		t.Errorf("running cost drifted to %d after repeated overwrites", c.cost)
-	}
-}
-
-// An oversized entry must still be readable once, or a long sentence would be
-// re-synthesized on every request.
-func TestLRUKeepsAnOversizedEntry(t *testing.T) {
-	t.Parallel()
-	c := newLRU(10, byteCost)
-	c.put("big", strings.Repeat("x", 100))
-
-	if _, ok := c.get("big"); !ok {
-		t.Error("an entry bigger than the budget was evicted immediately")
 	}
 }
 

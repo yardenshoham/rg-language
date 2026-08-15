@@ -12,8 +12,7 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
-// Examples are the project's reference sentences. Whole sentences on purpose: the
-// voice is best in connected speech and worst on one- and two-syllable words.
+// Examples are whole sentences on purpose: the voice is worst on one- and two-syllable words.
 var Examples = []string{
 	"מה נשמע",
 	"היום יום שלישי",
@@ -56,8 +55,7 @@ func Home(analytics Analytics, text string, result pipeline.Result) g.Node {
 	)
 }
 
-// Result renders the three views and the player. It is also the htmx fragment, so
-// the page and the live update cannot drift apart.
+// Result is also the htmx fragment, so the page and the live update cannot drift apart.
 func Result(result pipeline.Result) g.Node {
 	if result.Input == "" {
 		// An empty fragment is how htmx clears the result when the box is emptied.
@@ -68,13 +66,9 @@ func Result(result pipeline.Result) g.Node {
 		view("ככה כותבים את זה", "plain", "rtl", hebrewSegments(result.Unvocalized())),
 		view("ככה הוגים את זה", "vocalized", "rtl", hebrewSegments(result.Hebrew)),
 		view("ובאותיות לועזיות", "latin", "ltr", latinSyllables(result.Syllables)),
-		html.Div(html.Class("player"),
-			html.Audio(
-				g.Attr("controls", "controls"), html.Preload("none"),
-				html.Src("/audio/"+result.AudioHash+".wav"),
-				g.Text("הדפדפן שלכם לא יודע לנגן את הקובץ."),
-			),
-		),
+		html.Div(html.Class("player"), html.Audio(
+			g.Attr("controls", "controls"), html.Preload("none"), html.Src("/audio/"+result.AudioHash+".wav"),
+			g.Text("הדפדפן שלכם לא יודע לנגן את הקובץ."))),
 	}
 }
 
@@ -85,15 +79,20 @@ func view(label, class, dir string, body g.Node) g.Node {
 	)
 }
 
-// hebrewSegments tints the inserted רג. Runs arrive merged, so this is one span
-// per alternation, not per letter.
+// mark tints an inserted or a stressed piece; inserted wins when a piece is both.
+func mark(text string, inserted, stressed bool) g.Node {
+	switch {
+	case inserted:
+		return html.Span(html.Class("inserted"), g.Text(text))
+	case stressed:
+		return html.Span(html.Class("stressed"), g.Text(text))
+	}
+	return g.Text(text)
+}
+
+// hebrewSegments tints the inserted רג. Runs arrive merged, so one span per alternation.
 func hebrewSegments(segments []rg.Segment) g.Node {
-	return g.Map(segments, func(s rg.Segment) g.Node {
-		if !s.Inserted {
-			return g.Text(s.Text)
-		}
-		return html.Span(html.Class("inserted"), g.Text(s.Text))
-	})
+	return g.Map(segments, func(s rg.Segment) g.Node { return mark(s.Text, s.Inserted, false) })
 }
 
 func latinSyllables(words [][]heb.Syllable) g.Node {
@@ -101,15 +100,7 @@ func latinSyllables(words [][]heb.Syllable) g.Node {
 	for i, word := range words {
 		nodes = append(nodes, g.If(i > 0, g.Text(" ")))
 		for j, syllable := range word {
-			nodes = append(nodes, g.If(j > 0, g.Text("-")))
-			switch {
-			case syllable.Inserted:
-				nodes = append(nodes, html.Span(html.Class("inserted"), g.Text(syllable.Text)))
-			case syllable.Stressed:
-				nodes = append(nodes, html.Span(html.Class("stressed"), g.Text(syllable.Text)))
-			default:
-				nodes = append(nodes, g.Text(syllable.Text))
-			}
+			nodes = append(nodes, g.If(j > 0, g.Text("-")), mark(syllable.Text, syllable.Inserted, syllable.Stressed))
 		}
 	}
 	return nodes

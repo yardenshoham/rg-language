@@ -1,7 +1,5 @@
-// Package pages renders the site: Hebrew, right-to-left. Two things are
-// load-bearing and easy to lose — the page must declare UTF-8 (the server sends
-// the matching header), and it must use the bundled Noto Sans Hebrew at real
-// weights, because faux bold smears the niqqud that the whole view is for.
+// Package pages renders the site: Hebrew, right-to-left. Two things are easy to lose — the
+// page must declare UTF-8, and faux bold smears niqqud, so use bundled Noto's real weights.
 package pages
 
 import (
@@ -12,8 +10,7 @@ import (
 
 const Title = "שפת הריש גימל"
 
-// Layout threads analytics in rather than keeping it in a package variable, so two
-// servers in one process — which is what the tests are — cannot see each other's.
+// Layout threads analytics in rather than keeping it in a package variable: the tests run two servers in one process.
 func Layout(analytics Analytics, title, currentPath string, children ...g.Node) g.Node {
 	link := func(href, text string) g.Node {
 		return html.A(html.Href(href), g.If(currentPath == href, html.Aria("current", "page")), g.Text(text))
@@ -35,13 +32,8 @@ func Layout(analytics Analytics, title, currentPath string, children ...g.Node) 
 				html.Nav(link("/", "תרגום"), link("/about", "מה זה")),
 			),
 			html.Main(children...),
-			html.Footer(
-				html.P(
-					g.Text("צעצוע. הדיבור נוצר במחשב, אז לפעמים אות אחרונה נבלעת. "),
-					html.A(html.Href("/about"), g.Text("עוד על זה")),
-					g.Text("."),
-				),
-			),
+			html.Footer(html.P(g.Text("צעצוע. הדיבור נוצר במחשב, אז לפעמים אות אחרונה נבלעת. "),
+				html.A(html.Href("/about"), g.Text("עוד על זה")), g.Text("."))),
 		},
 	})
 }

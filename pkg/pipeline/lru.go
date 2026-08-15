@@ -29,29 +29,24 @@ func newLRU[V any](limit int64, costOf func(V) int64) *lru[V] {
 func (c *lru[V]) get(key string) (V, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	element, ok := c.entries[key]
-	if !ok {
-		var zero V
-		return zero, false
+	if element, ok := c.entries[key]; ok {
+		c.order.MoveToFront(element)
+		return element.Value.(*entry[V]).value, true
 	}
-	c.order.MoveToFront(element)
-	return element.Value.(*entry[V]).value, true
+	var zero V
+	return zero, false
 }
 
 func (c *lru[V]) put(key string, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	cost := c.costOf(value)
 	if element, ok := c.entries[key]; ok {
-		existing := element.Value.(*entry[V])
-		c.cost += cost - existing.cost
-		existing.value, existing.cost = value, cost
-		c.order.MoveToFront(element)
-	} else {
-		c.entries[key] = c.order.PushFront(&entry[V]{key: key, value: value, cost: cost})
-		c.cost += cost
+		c.cost -= c.order.Remove(element).(*entry[V]).cost
 	}
+	cost := c.costOf(value)
+	c.entries[key] = c.order.PushFront(&entry[V]{key: key, value: value, cost: cost})
+	c.cost += cost
 
 	// Never evict the entry just added, however big it is.
 	for c.cost > c.limit && c.order.Len() > 1 {

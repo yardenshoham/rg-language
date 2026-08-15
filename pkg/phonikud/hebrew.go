@@ -5,12 +5,10 @@ import (
 	"strings"
 )
 
-// The finite-state transducer, ported from phonikud's hebrew.py. It holds no state
-// beyond a three-letter window — previous, current, next — which is what makes
-// Hebrew's special cases a flat chain of rules. The rules that look arbitrary are
-// not: each encodes a real edge case a native speaker validated. Do not tidy them.
+// The transducer, ported from phonikud's hebrew.py: a three-letter window —
+// previous, current, next — and a flat chain of rules. Rules that look arbitrary
+// each encode an edge case a native speaker validated; do not tidy them.
 //
-// Reference:
 //   - https://en.wikipedia.org/wiki/Help:IPA/Hebrew
 //   - https://hebrew-academy.org.il/2020/08/11/איך-הוגים-את-השווא-הנע
 //   - https://hebrew-academy.org.il/2022/03/03/מלעיל-ומלרע-על-ההטעמה-בעברית
@@ -202,8 +200,7 @@ func sortStress(phonemes []string) []string {
 	return kept
 }
 
-// keepPhonemes drops anything not made entirely of output characters, which is how
-// Hebrew letters, digits and quotes leave the stream.
+// keepPhonemes drops non-phoneme strings: how letters, digits and quotes leave.
 func keepPhonemes(phonemes []string) []string {
 	return slices.DeleteFunc(phonemes, func(p string) bool {
 		return p == "" || strings.ContainsFunc(p, func(r rune) bool { return !setPhonemes[r] })

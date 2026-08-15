@@ -12,9 +12,8 @@ export RG_MODELS_DIR = $(CURDIR)/$(MODELS)
 
 .PHONY: models onnxruntime run say test test-full e2e shot lint clean
 
-## Download the two checkpoints and verify them. A mismatch is fatal: the voice
-## was chosen by human listening, so a substituted checkpoint would invalidate
-## every verdict behind this project.
+## Download the two checkpoints and verify them. A mismatch is fatal: a substituted
+## checkpoint would invalidate the blind listening test this voice won.
 models: $(MODELS)/matcha-he-en.onnx $(MODELS)/phonikud-1.0.onnx
 
 $(MODELS)/matcha-he-en.onnx:
@@ -42,10 +41,9 @@ run: models onnxruntime
 say: models onnxruntime
 	go run . say $(TEXT)
 
-## The fast suite: no models needed, and it still replays the whole corpus through
-## everything below the diacritizer. The exports above are cleared, or the model tests
-## find the checkpoints and this takes 10x longer. -race is what makes the cache's
-## concurrency test able to fail at all.
+## The fast suite: no models, still the whole corpus below the diacritizer. Exports
+## cleared or the model tests find the checkpoints (10x slower); -race is what lets
+## the cache's concurrency test fail at all.
 test:
 	RG_MODELS_DIR= ONNXRUNTIME_LIB= go test -race ./...
 

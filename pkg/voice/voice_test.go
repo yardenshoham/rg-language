@@ -9,20 +9,13 @@ import (
 	"github.com/yardenshoham/rg-language/internal/corpustest"
 )
 
-// testVoice has a stand-in symbol table and no session, so the encoding can be
-// checked without the 131 MB checkpoint.
-func testVoice() *Voice {
-	return &Voice{
-		ids:        map[rune]int64{'ʃ': 96, 'a': 14, 'ʁ': 94, 'ɡ': 66, 'l': 24, 'ˈ': 120, 'o': 27, 'm': 25},
-		sampleRate: 22050,
-	}
-}
-
 // Matcha wants a blank before, between and after every phoneme. This is the whole
 // contract between the RG string and the model, and getting it wrong does not fail
 // loudly — a checkpoint fed the wrong interleaving produces fluent-sounding nonsense.
 func TestPhonemeIDs(t *testing.T) {
 	t.Parallel()
+	// A stand-in symbol table, so the encoding needs no 131 MB checkpoint.
+	v := &Voice{ids: map[rune]int64{'ʃ': 96, 'a': 14, 'ʁ': 94, 'ɡ': 66, 'l': 24, 'ˈ': 120, 'o': 27, 'm': 25}}
 	tests := []struct {
 		ipa  string
 		want []int64
@@ -32,24 +25,16 @@ func TestPhonemeIDs(t *testing.T) {
 		{"ʃaʁɡalˈom", []int64{
 			0, 96, 0, 14, 0, 94, 0, 66, 0, 14, 0, 24, 0, 120, 0, 27, 0, 25, 0,
 		}},
+		// An unknown symbol is dropped, not given an arbitrary id.
+		{"ʃal☃om", []int64{0, 96, 0, 14, 0, 24, 0, 27, 0, 25, 0}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.ipa, func(t *testing.T) {
 			t.Parallel()
-			if got := testVoice().phonemeIDs(tt.ipa); !slices.Equal(got, tt.want) {
+			if got := v.phonemeIDs(tt.ipa); !slices.Equal(got, tt.want) {
 				t.Errorf("phonemeIDs(%q) = %v, want %v", tt.ipa, got, tt.want)
 			}
 		})
-	}
-}
-
-// Unknown phonemes must be dropped, not given an arbitrary id.
-func TestPhonemeIDsSkipsUnknown(t *testing.T) {
-	t.Parallel()
-	v := testVoice()
-	known := v.phonemeIDs("ʃalom")
-	if got := v.phonemeIDs("ʃal☃om"); !slices.Equal(got, known) {
-		t.Errorf("an unknown symbol changed the ids: %v", got)
 	}
 }
 
