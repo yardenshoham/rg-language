@@ -23,8 +23,8 @@ var Examples = []string{
 }
 
 // Home renders the whole page. result is the zero value before anything is typed.
-func Home(text string, result pipeline.Result) g.Node {
-	return Layout(Title, "/",
+func Home(analytics Analytics, text string, result pipeline.Result) g.Node {
+	return Layout(analytics, Title, "/",
 		html.P(html.Class("lead"),
 			g.Text("כותבים משפט בעברית, ומקבלים אותו בשפת הריש גימל — אחרי כל תנועה נכנס "),
 			html.Strong(g.Text("רג")),

@@ -17,9 +17,12 @@ import (
 
 func newWebCmd() *cobra.Command {
 	var (
-		addr         string
-		modelsDir    string
-		audioCacheMB int
+		addr          string
+		modelsDir     string
+		audioCacheMB  int
+		posthogKey    string
+		posthogHost   string
+		posthogUIHost string
 	)
 
 	cmd := &cobra.Command{
@@ -68,13 +71,25 @@ func newWebCmd() *cobra.Command {
 			}()
 			logger.Info("models loaded", "took", time.Since(started).Round(time.Millisecond))
 
-			return web.NewServer(logger, p).ListenAndServe(ctx, addr)
+			if posthogKey != "" {
+				logger.Info("analytics enabled", "host", posthogHost)
+			}
+
+			return web.NewServer(logger, p, web.Config{
+				PostHogKey:    posthogKey,
+				PostHogHost:   posthogHost,
+				PostHogUIHost: posthogUIHost,
+			}).ListenAndServe(ctx, addr)
 		},
 	}
 
 	cmd.Flags().StringVar(&addr, "addr", listenAddr(), "Listen address ($RG_ADDR, or $PORT)")
 	cmd.Flags().StringVar(&modelsDir, "models", modelsDirDefault(), "Directory holding the two .onnx models ($RG_MODELS_DIR)")
 	cmd.Flags().IntVar(&audioCacheMB, "audio-cache-mb", 0, "Megabytes of synthesized audio to keep in memory ($RG_AUDIO_CACHE_MB)")
+	// Analytics are opt-in: with no key the site serves no tracking script at all.
+	cmd.Flags().StringVar(&posthogKey, "posthog-key", os.Getenv("RG_POSTHOG_KEY"), "PostHog project API key; enables analytics ($RG_POSTHOG_KEY)")
+	cmd.Flags().StringVar(&posthogHost, "posthog-host", os.Getenv("RG_POSTHOG_HOST"), "PostHog ingestion host ($RG_POSTHOG_HOST)")
+	cmd.Flags().StringVar(&posthogUIHost, "posthog-ui-host", os.Getenv("RG_POSTHOG_UI_HOST"), "PostHog dashboard host, for links when the ingestion host is a proxy ($RG_POSTHOG_UI_HOST)")
 	return cmd
 }
 

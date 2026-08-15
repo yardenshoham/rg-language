@@ -13,8 +13,10 @@ import (
 // Title is the site's name.
 const Title = "שפת הריש גימל"
 
-// Layout wraps page content in the shared shell.
-func Layout(title, currentPath string, children ...g.Node) g.Node {
+// Layout wraps page content in the shared shell. analytics is threaded in
+// rather than kept in a package variable, so two servers in one process — which
+// is what the tests are — cannot see each other's configuration.
+func Layout(analytics Analytics, title, currentPath string, children ...g.Node) g.Node {
 	return c.HTML5(c.HTML5Props{
 		Title:       title,
 		Description: "כותבים משפט בעברית ומקבלים אותו בשפת הריש גימל, כתוב ומדובר.",
@@ -24,6 +26,7 @@ func Layout(title, currentPath string, children ...g.Node) g.Node {
 			html.Link(html.Rel("stylesheet"), html.Href("/static/app.css")),
 			html.Link(html.Rel("icon"), html.Href("/static/favicon.svg"), html.Type("image/svg+xml")),
 			html.Script(html.Src("/static/htmx.min.js"), g.Attr("defer", "defer")),
+			posthogScript(analytics),
 		},
 		Body: []g.Node{
 			html.Header(

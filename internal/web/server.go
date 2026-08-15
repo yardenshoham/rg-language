@@ -25,11 +25,23 @@ var staticFiles embed.FS
 // maxInputRunes bounds what one request may ask the models to do.
 const maxInputRunes = 500
 
+// Config carries the server's optional settings. The zero value is a complete
+// site; everything here is off unless it is configured.
+type Config struct {
+	// PostHogKey enables PostHog analytics when set.
+	PostHogKey string
+	// PostHogHost is the ingestion host, defaulting to PostHog's EU cloud.
+	PostHogHost string
+	// PostHogUIHost is the dashboard host, needed only behind a reverse proxy.
+	PostHogUIHost string
+}
+
 // Server is the HTTP server, middleware and all.
 type Server struct {
-	logger   *slog.Logger
-	pipeline *pipeline.Pipeline
-	handler  http.Handler
+	logger    *slog.Logger
+	pipeline  *pipeline.Pipeline
+	analytics pages.Analytics
+	handler   http.Handler
 }
 
 // ServeHTTP satisfies http.Handler.
@@ -40,18 +52,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // NewServer registers all routes. The pipeline is loaded before the port opens, so
 // both models are resident by the time anything can reach these handlers — which
 // is also what makes Railway's health check honest.
-func NewServer(logger *slog.Logger, p *pipeline.Pipeline) *Server {
-	s := &Server{logger: logger, pipeline: p}
+func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server {
+	s := &Server{
+		logger:   logger,
+		pipeline: p,
+		analytics: pages.Analytics{
+			PostHogKey:    config.PostHogKey,
+			PostHogHost:   config.PostHogHost,
+			PostHogUIHost: config.PostHogUIHost,
+		},
+	}
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /static/", cacheAssets(http.FileServerFS(staticFiles)))
-	mux.HandleFunc("GET /{$}", s.transformed("home page", pages.Home))
+	mux.HandleFunc("GET /{$}", s.transformed("home page",
+		func(text string, result pipeline.Result) g.Node { return pages.Home(s.analytics, text, result) }))
+	// The fragment is body content, so it carries no layout and no analytics.
 	mux.HandleFunc("GET /transform", s.transformed("result fragment",
 		func(_ string, result pipeline.Result) g.Node { return pages.Result(result) }))
 	// A ServeMux wildcard spans a whole segment, so .wav comes off in the handler.
 	mux.HandleFunc("GET /audio/{name}", s.handleAudio)
 	mux.HandleFunc("GET /about", func(w http.ResponseWriter, _ *http.Request) {
-		s.render(w, "about page", pages.About())
+		s.render(w, "about page", pages.About(s.analytics))
 	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
 

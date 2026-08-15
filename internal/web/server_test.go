@@ -15,7 +15,13 @@ import (
 // are set on the request as name, value pairs.
 func get(t *testing.T, path string, headers ...string) *http.Response {
 	t.Helper()
-	srv := httptest.NewServer(web.NewServer(slog.New(slog.DiscardHandler), nil))
+	return getWith(t, web.Config{}, path, headers...)
+}
+
+// getWith is get with a configured server, for the optional features.
+func getWith(t *testing.T, config web.Config, path string, headers ...string) *http.Response {
+	t.Helper()
+	srv := httptest.NewServer(web.NewServer(slog.New(slog.DiscardHandler), nil, config))
 	t.Cleanup(srv.Close)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+path, nil)
@@ -122,6 +128,54 @@ func TestAbout(t *testing.T) {
 	if page := body(t, resp); !strings.Contains(page, "הכלל") {
 		t.Error("about page does not explain the rule")
 	}
+}
+
+// Analytics are opt-in, and each server answers with its own configuration —
+// they are threaded through the pages rather than kept in a package variable.
+func TestPostHogIsOptIn(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{"/", "/about"} {
+		t.Run("off"+path, func(t *testing.T) {
+			t.Parallel()
+			if page := body(t, get(t, path)); strings.Contains(page, "posthog") {
+				t.Error("page mentions posthog with no key configured")
+			}
+		})
+	}
+
+	t.Run("configured", func(t *testing.T) {
+		t.Parallel()
+		page := body(t, getWith(t, web.Config{
+			PostHogKey:    "phc_test",
+			PostHogHost:   "https://m.example.com",
+			PostHogUIHost: "https://eu.posthog.com",
+		}, "/"))
+		want := `posthog.init("phc_test",{api_host:"https://m.example.com",ui_host:"https://eu.posthog.com",` +
+			`defaults:'2026-05-30',person_profiles:'identified_only'})`
+		if !strings.Contains(page, want) {
+			t.Errorf("home page is missing %q", want)
+		}
+	})
+
+	// The fragment htmx swaps in is body content: a second copy of the loader
+	// there would re-init PostHog on every keystroke.
+	t.Run("fragment", func(t *testing.T) {
+		t.Parallel()
+		if fragment := body(t, getWith(t, web.Config{PostHogKey: "phc_test"}, "/transform?text=")); strings.Contains(fragment, "posthog") {
+			t.Error("result fragment carries the analytics script")
+		}
+	})
+
+	// Without an explicit host the snippet still needs one, or it has nowhere to
+	// send events and no assets host to derive.
+	t.Run("default host", func(t *testing.T) {
+		t.Parallel()
+		page := body(t, getWith(t, web.Config{PostHogKey: "phc_test"}, "/about"))
+		if !strings.Contains(page, `posthog.init("phc_test",{api_host:"https://eu.i.posthog.com",defaults:`) {
+			t.Error("about page does not fall back to the EU cloud host")
+		}
+	})
 }
 
 // Served from the binary: a CDN is one more thing to break, and Hebrew needs a
