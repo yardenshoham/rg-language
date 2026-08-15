@@ -100,9 +100,8 @@ func TestTokenize(t *testing.T) {
 	}
 }
 
-// Whatever the model decides, stripping the niqqud again must return every input
-// character exactly once — the guard against the reassembly losing or duplicating
-// text around tokens that are not one-per-rune.
+// Whatever the model decides, stripping the niqqud again must return every input character
+// exactly once — the guard against reassembly losing text around non-one-per-rune tokens.
 func TestReassemblyRoundTrip(t *testing.T) {
 	t.Parallel()
 	d := corpustest.Model(t, "phonikud-1.0.onnx", New)

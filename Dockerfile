@@ -1,11 +1,9 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.26-bookworm AS builder
 
-# BuildKit fetches these itself and fails the build on a digest mismatch. The
-# pins are deliberate: the voice was chosen over seven others by blind human
-# listening, so a silently substituted checkpoint would invalidate every verdict
-# this project rests on. Keep them above the source copy so a code change does not
-# invalidate ~440 MB of cached downloads.
+# BuildKit fetches these and fails on a digest mismatch. The pins are deliberate: a
+# silently substituted checkpoint would invalidate the blind listening test the voice
+# won. Above the source copy, so a code change does not re-download ~440 MB.
 ARG ORT_VERSION=1.29.0
 ARG VOICE_REVISION=dcca83dc0911c898fbe4bba464fa450a98c4e7a0
 ARG DIACRITIZER_REVISION=b806189fe1fc0085b1012b7560ffb5e8ecfd72a2
@@ -34,15 +32,14 @@ RUN go mod download
 
 COPY . .
 
-# CGo is required here, unlike most Go services: onnxruntime_go binds the ONNX
-# Runtime C API, so there is no static, libc-free build to be had.
+# CGo is required, unlike most Go services: onnxruntime_go binds the ONNX Runtime
+# C API, so there is no static, libc-free build to be had.
 ENV CGO_ENABLED=1 GOOS=linux GOARCH=amd64
 RUN go build -trimpath -ldflags="-s -w" -o /out/rg-language .
 
-# Not FROM scratch: ONNX Runtime is a glibc C++ library needing a libc and a
-# libstdc++. gcr.io/distroless/cc-debian12 is the tighter choice and does ship
-# every library the .so lists as NEEDED, but ONNX Runtime segfaults inside
-# CreateEnv there.
+# Not scratch, and not distroless/cc-debian12 either: ONNX Runtime is a glibc C++
+# library, and distroless/cc ships every library the .so lists as NEEDED yet still
+# segfaults inside CreateEnv.
 FROM debian:bookworm-slim
 
 COPY --from=builder /out/lib/ /usr/local/lib/

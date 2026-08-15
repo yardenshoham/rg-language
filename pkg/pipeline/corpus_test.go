@@ -11,13 +11,12 @@ import (
 
 const corpusPath = "../phonikud/testdata/corpus.jsonl"
 
-// 5,012 items through a 300 MB model take minutes, so this walks a deterministic
-// sample by default. RG_FULL_CORPUS=1 checks all of them.
+// A deterministic sample by default: all 5,012 through a 300 MB model take minutes.
+// RG_FULL_CORPUS=1 checks every item.
 const sampleSize = 200
 
-// TestDiacritizerCorpus covers the one stage the transducer's own test cannot. Argmax
-// over identical token ids is stable, so a mismatch means the tokenizer or the
-// reassembly is wrong, not the weights.
+// TestDiacritizerCorpus covers the one stage the transducer's own test cannot. Argmax over
+// identical token ids is stable, so a mismatch is the tokenizer or the reassembly, not the weights.
 func TestDiacritizerCorpus(t *testing.T) {
 	t.Parallel()
 	d := corpustest.Model(t, pipeline.DiacritizerModel, diacritizer.New)
@@ -80,9 +79,8 @@ func TestDoubledVowel(t *testing.T) {
 	}
 }
 
-// knownDoubledVowels are the items still flagged after NormalizeNiqqud — a different
-// shape from the vav artifact, so there is nothing to repair. The count is pinned: a
-// new one means new vocabulary to look at.
+// knownDoubledVowels are the items still flagged after NormalizeNiqqud: a different shape
+// from the vav artifact, so nothing to repair. Pinned, so a new one means new vocabulary.
 var knownDoubledVowels = map[string]bool{
 	"איפה אני יכול למצוא רשת WiFi פתוחה ?": true,
 	"היא חבקה את התינוק לחזה.":             true,

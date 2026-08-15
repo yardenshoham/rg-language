@@ -1,9 +1,7 @@
-// Package corpustest reads the differential corpus that several packages' tests
-// replay: 5,012 Hebrew words and sentences run once through the original Python
-// implementation, recording every stage. Hebrew -> niqqud -> IPA -> RG is
-// deterministic, so this pins the port byte-for-byte, and the fork is frozen so it
-// stays valid. It lives in its own package because an external test package cannot
-// be imported.
+// Package corpustest reads the differential corpus several packages' tests replay:
+// 5,012 Hebrew items run once through the original Python implementation with every
+// stage recorded. The port is deterministic and the fork frozen, so this pins it
+// byte-for-byte. Its own package because an external test package cannot be imported.
 package corpustest
 
 import (

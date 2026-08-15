@@ -30,32 +30,30 @@ type Config = pages.Analytics
 
 type Server struct {
 	http.Handler
-	logger    *slog.Logger
-	pipeline  *pipeline.Pipeline
-	analytics pages.Analytics
+	logger   *slog.Logger
+	pipeline *pipeline.Pipeline
 }
 
 // NewServer runs after the models load, so every handler here has both resident.
 func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server {
-	s := &Server{logger: logger, pipeline: p, analytics: config}
+	s := &Server{logger: logger, pipeline: p}
 	mux := http.NewServeMux()
 
-	// An hour, not longer: asset URLs are not content-addressed and an embedded
-	// file has no mtime to revalidate against, so a redeploy's new CSS must not
-	// linger for days. They total about 60 KB, so re-fetching is cheap.
+	// An hour, not longer: the URLs are not content-addressed and an embedded file has no
+	// mtime to revalidate against, so new CSS must not linger. About 60 KB, so re-fetching is cheap.
 	assets := http.FileServerFS(staticFiles)
 	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		assets.ServeHTTP(w, r)
 	})
 	mux.HandleFunc("GET /{$}", s.transformed("home page",
-		func(text string, result pipeline.Result) g.Node { return pages.Home(s.analytics, text, result) }))
+		func(text string, result pipeline.Result) g.Node { return pages.Home(config, text, result) }))
 	// The fragment is body content, so it carries no layout and no analytics.
 	mux.HandleFunc("GET /transform", s.transformed("result fragment",
 		func(_ string, result pipeline.Result) g.Node { return pages.Result(result) }))
 	// A ServeMux wildcard spans a whole segment, so .wav comes off in the handler.
 	mux.HandleFunc("GET /audio/{name}", s.handleAudio)
-	mux.HandleFunc("GET /about", func(w http.ResponseWriter, _ *http.Request) { s.render(w, "about page", pages.About(s.analytics)) })
+	mux.HandleFunc("GET /about", func(w http.ResponseWriter, _ *http.Request) { s.render(w, "about page", pages.About(config)) })
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
 
 	s.Handler = s.instrument(mux)
@@ -89,16 +87,14 @@ func (s *Server) render(w http.ResponseWriter, what string, n g.Node) {
 	}
 }
 
-// transformed builds the handler for a page made of transformed input. An empty
-// box short-circuits to the zero Result, which renders as nothing.
+// transformed handles a page made of transformed input; an empty box renders nothing.
 func (s *Server) transformed(what string, page func(string, pipeline.Result) g.Node) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		text := strings.TrimSpace(r.FormValue("text"))
 		if runes := []rune(text); len(runes) > maxInputRunes {
 			text = string(runes[:maxInputRunes])
 		}
-		// Keep the address bar in step with the box so the URL stays shareable. The
-		// bounded text is what goes in, so a shared link cannot ask for more.
+		// Keep the address bar in step with the box so the URL stays shareable, bounded and all.
 		if r.Header.Get("HX-Request") != "" {
 			shareable := "/"
 			if text != "" {
@@ -120,8 +116,7 @@ func (s *Server) transformed(what string, page func(string, pipeline.Result) g.N
 	}
 }
 
-// handleAudio serves synthesized speech. The hash covers the phonemes and the
-// synthesis settings, so a URL's content can never change — hence immutable.
+// handleAudio serves synthesized speech; the hash covers phonemes and settings, hence immutable.
 func (s *Server) handleAudio(w http.ResponseWriter, r *http.Request) {
 	hash, ok := strings.CutSuffix(r.PathValue("name"), ".wav")
 	if !ok {
@@ -142,13 +137,11 @@ func (s *Server) handleAudio(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "audio/wav")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	// ServeContent, not Write, for the range requests: Safari probes with Range
-	// before playing anything, and seeking needs them everywhere.
+	// ServeContent, not Write: Safari probes with Range before playing, and seeking needs it.
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(wav))
 }
 
-// instrument logs every request and turns a panic into a 500. Recovery runs before
-// the log line so the log reports the 500.
+// instrument logs every request; recovery runs before the log line so the log reports the 500.
 func (s *Server) instrument(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

@@ -1,12 +1,8 @@
-// Screenshot a page of the running site, so a change can be looked at rather
-// than only asserted about.
+// Screenshot a page of the running site (`make run` elsewhere, or point --base).
 //
 //   node shot.mjs                              the home page, light, to debug/shot.png
 //   node shot.mjs --text "מה נשמע" --theme dark
 //   node shot.mjs /about --out debug/about.png --width 420
-//
-// The server has to be running: `make run` in another terminal, or point --base
-// somewhere else.
 import { chromium } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

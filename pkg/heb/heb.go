@@ -1,20 +1,18 @@
 // Package heb renders RG for humans: Hebrew with niqqud, the same stripped, and
-// hyphenated Latin syllables.
-//
-// It runs on the vocalized Hebrew rather than converting IPA back to letters: the
-// niqqud already marks every vowel, which avoids an IPA-to-Hebrew generator and its
-// matres lectionis, final forms and silent א/ה/ע.
+// hyphenated Latin syllables. It works from the vocalized Hebrew, not the IPA: the
+// niqqud already marks every vowel, so no IPA-to-Hebrew generator (matres lectionis,
+// final forms, silent א/ה/ע) is needed.
 package heb
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
-// Hebrew marks by their Unicode names, as escapes because a literal combining mark
-// stacks on its own quote and cannot be proofread. phonikudStress is the diacritizer's
-// "ole", not part of the spelling, so it is dropped before rendering.
+// Escapes, not literals: a combining mark stacks on its own quote and cannot be
+// proofread. phonikudStress is the diacritizer's "ole", dropped before rendering.
 const (
 	shva, hatafSegol, hatafPatah, hatafQamats = "\u05b0", "\u05b1", "\u05b2", "\u05b3"
 	hiriq, tsere, segol, patah, qamats        = "\u05b4", "\u05b5", "\u05b6", "\u05b7", "\u05b8"
@@ -34,18 +32,12 @@ var vowels = map[string]struct{ sound, copied string }{
 	hatafQamats: {"o", vav + holam},
 }
 
-// isMark reports whether r is a Hebrew point, accent or cantillation mark. The
-// letters start at U+05D0, above this range, so nothing overlaps.
+// isMark reports a Hebrew point, accent or cantillation mark; letters start at U+05D0.
 func isMark(r rune) bool { return r >= 0x0591 && r <= 0x05c7 }
 
 // StripMarks removes every niqqud mark, which is how people actually write RG.
 func StripMarks(text string) string {
-	return strings.Map(func(r rune) rune {
-		if isMark(r) {
-			return -1
-		}
-		return r
-	}, text)
+	return string(slices.DeleteFunc([]rune(text), isMark))
 }
 
 type unit struct{ letter, marks string }
@@ -127,15 +119,12 @@ func RGSegments(vocalized string) []rg.Segment {
 	return segs
 }
 
-var latin = strings.NewReplacer(
-	"ʃ", "sh", "χ", "kh", "ʁ", "r", "ɡ", "g", "ʔ", "", "ʒ", "zh", "j", "y",
-)
+var latin = strings.NewReplacer("ʃ", "sh", "χ", "kh", "ʁ", "r", "ɡ", "g", "ʔ", "", "ʒ", "zh", "j", "y")
 
 // Syllable is one Latin syllable of the readable fallback rendering.
 type Syllable struct {
-	Text     string
-	Stressed bool
-	Inserted bool
+	Text               string
+	Stressed, Inserted bool
 }
 
 // Syllables splits IPA into per-word syllables. Maximal onset, which makes each

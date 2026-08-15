@@ -1,8 +1,6 @@
 // Package rg applies the Resh-Gimel transform to IPA phonemes: after every vowel,
-// insert /ʁɡ/ and a copy of that vowel.
-//
-// No syllabification is needed: the insert lands right after a vowel, so the syllable
-// boundary is invisible — sha|lom and shal|om both give shargalorgom.
+// insert /ʁɡ/ and a copy of that vowel. No syllabification is needed — the insert
+// lands right after the vowel, so sha|lom and shal|om both give shargalorgom.
 package rg
 
 import "strings"
@@ -27,8 +25,7 @@ const (
 	StressBoth   StressMode = "both"
 )
 
-// Segment is a run of transformed text; Inserted marks what the rule added, for the
-// UI to highlight. Built only by package heb: raw IPA is never shown to users.
+// Segment is a run of transformed text; Inserted marks the added רג for highlighting.
 type Segment struct {
 	Text     string
 	Inserted bool
@@ -36,15 +33,12 @@ type Segment struct {
 
 func IsVowel(r rune) bool { return r == 'a' || r == 'e' || r == 'i' || r == 'o' || r == 'u' }
 
-func Transform(ipa string, mode StressMode) string {
-	firstStress, secondStress := "", ""
-	if mode == StressFirst || mode == StressBoth {
-		firstStress = Stress
-	}
-	if mode == StressSecond || mode == StressBoth {
-		secondStress = Stress
-	}
+var stressOf = map[StressMode][2]string{ // marks for [original, copy]
+	StressFirst: {Stress, ""}, StressSecond: {"", Stress}, StressBoth: {Stress, Stress},
+}
 
+func Transform(ipa string, mode StressMode) string {
+	stress := stressOf[mode]
 	runes := []rune(ipa)
 	var b strings.Builder
 	for i := 0; i < len(runes); i++ {
@@ -52,7 +46,7 @@ func Transform(ipa string, mode StressMode) string {
 		// The mark precedes its vowel, so the two move together.
 		if v == Stress && i+1 < len(runes) && IsVowel(runes[i+1]) {
 			i++
-			v, first, second = string(runes[i]), firstStress, secondStress
+			v, first, second = string(runes[i]), stress[0], stress[1]
 		}
 		b.WriteString(first + v)
 		if IsVowel(runes[i]) {

@@ -6,16 +6,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = process.env.RG_E2E_PORT ?? "25256";
 const baseURL = `http://127.0.0.1:${port}`;
 
-// Local development keeps the models and the ONNX Runtime library under debug/,
-// which `make models onnxruntime` fills in. The container puts them elsewhere,
-// hence the overrides.
-const env = {
-  ONNXRUNTIME_LIB:
-    process.env.ONNXRUNTIME_LIB ??
-    path.join(root, "debug/onnxruntime/lib/libonnxruntime.so"),
-  RG_MODELS_DIR: process.env.RG_MODELS_DIR ?? path.join(root, "debug/models"),
-};
-
 export default defineConfig({
   outputDir: path.join(root, "debug/e2e-results"),
   reporter: [["list"], ["html", { outputFolder: path.join(root, "debug/e2e-report"), open: "never" }]],
@@ -35,7 +25,12 @@ export default defineConfig({
     command: `go run . web --addr :${port}`,
     cwd: root,
     url: `${baseURL}/health`,
-    env,
+    // Local dev keeps these under debug/, which `make models onnxruntime` fills in;
+    // the container puts them elsewhere.
+    env: {
+      ONNXRUNTIME_LIB: process.env.ONNXRUNTIME_LIB ?? path.join(root, "debug/onnxruntime/lib/libonnxruntime.so"),
+      RG_MODELS_DIR: process.env.RG_MODELS_DIR ?? path.join(root, "debug/models"),
+    },
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",

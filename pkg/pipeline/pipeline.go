@@ -1,6 +1,5 @@
 // Package pipeline turns Hebrew text into RG text and RG speech: AddDiacritics ->
 // NormalizeNiqqud -> ApplyLexicon -> Phonemize -> rg.Transform -> voice.Synth.
-// Only the first step is a model, so only it can surprise you.
 package pipeline
 
 import (
@@ -28,15 +27,6 @@ import (
 const (
 	DiacritizerModel = "phonikud-1.0.onnx"
 	VoiceModel       = "matcha-he-en.onnx"
-)
-
-// Cache sizes in bytes, not entries: an entry is as big as what someone typed, so a
-// count-based bound would let unauthenticated traffic pin unbounded memory. Ids are
-// far smaller than audio, so an equal budget holds many more.
-const (
-	transformCacheBytes = 64 << 20
-	audioIDCacheBytes   = 64 << 20
-	defaultAudioBytes   = 256 << 20
 )
 
 // modelTimeout bounds waiting for and then holding the model slot. A sentence
@@ -80,9 +70,8 @@ type Pipeline struct {
 	audioIDs   *lru[string]
 	audio      *lru[[]byte]
 
-	// singleflight collapses concurrent requests for the same input; modelSlot then
-	// serializes what is left, since two resident models leave no memory to spare
-	// for parallel sessions and ONNX Runtime already uses all the cores.
+	// singleflight collapses duplicate requests; modelSlot serializes the rest, since two
+	// resident models leave no memory for parallel sessions and ONNX Runtime uses all cores.
 	transforming singleflight.Group
 	synthesizing singleflight.Group
 	modelSlot    chan struct{}
@@ -101,8 +90,7 @@ func modelWork[V any](p *Pipeline, fn func() (V, error)) (V, error) {
 	return fn()
 }
 
-// cachedOnce answers from cache, or runs fn once however many callers ask at once,
-// caching the result and waiting only as long as this caller is interested.
+// cachedOnce answers from cache, or runs fn once however many callers ask at once.
 func cachedOnce[V any](ctx context.Context, group *singleflight.Group, cache *lru[V], key string, fn func() (V, error)) (V, error) {
 	if cached, ok := cache.get(key); ok {
 		return cached, nil
@@ -128,10 +116,11 @@ func cachedOnce[V any](ctx context.Context, group *singleflight.Group, cache *lr
 	}
 }
 
-// New takes a few seconds — most of the process's startup. audioCacheMB zero picks
-// the default.
+// New takes a few seconds — most of the process's startup; audioCacheMB zero picks the
+// default. The cache budgets are bytes, not entries: an entry is as big as what someone
+// typed, so a count bound would let traffic pin unbounded memory; ids are far smaller.
 func New(ctx context.Context, modelsDir string, audioCacheMB int) (*Pipeline, error) {
-	audioBytes := cmp.Or(max(int64(audioCacheMB)<<20, 0), int64(defaultAudioBytes))
+	audioBytes := cmp.Or(max(int64(audioCacheMB)<<20, 0), int64(256<<20))
 
 	d, err := diacritizer.New(ctx, filepath.Join(modelsDir, DiacritizerModel))
 	if err != nil {
@@ -146,8 +135,8 @@ func New(ctx context.Context, modelsDir string, audioCacheMB int) (*Pipeline, er
 	return &Pipeline{
 		diacritizer: d,
 		voice:       v,
-		transforms:  newLRU(transformCacheBytes, resultCost),
-		audioIDs:    newLRU(audioIDCacheBytes, func(rgIPA string) int64 { return int64(len(rgIPA)) + 64 }),
+		transforms:  newLRU(64<<20, resultCost),
+		audioIDs:    newLRU(64<<20, func(rgIPA string) int64 { return int64(len(rgIPA)) + 64 }),
 		audio:       newLRU(audioBytes, func(b []byte) int64 { return int64(len(b)) }),
 		modelSlot:   make(chan struct{}, 1),
 	}, nil
@@ -198,8 +187,7 @@ func (p *Pipeline) Transform(ctx context.Context, text string) (Result, error) {
 // request. The cache is a correctness feature, not just a speed one: the voice samples
 // a noise prior, so re-synthesis of the same phonemes sounds audibly different.
 func (p *Pipeline) Audio(ctx context.Context, hash string) ([]byte, error) {
-	// Ahead of the id lookup: a hot WAV's id is never refreshed, so it can age out
-	// of the id cache while the audio is still here.
+	// Ahead of the id lookup: a hot WAV's id can age out while the audio is still here.
 	if cached, ok := p.audio.get(hash); ok {
 		return cached, nil
 	}

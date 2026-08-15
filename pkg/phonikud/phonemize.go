@@ -1,11 +1,9 @@
 // Package phonikud converts vocalized Hebrew to IPA.
 //
-// A frozen Go fork of the Python phonikud 0.4.1 transducer, deliberately not
-// tracking upstream: the snapshot is what keeps the differential corpus valid
-// forever. Two upstream features are left out — the digit-and-date expander
-// (numbers, dates and acronyms were never tested end to end here, so digits just
-// fall out of the stream) and the fallback and hyper-phoneme (`[word](/ipa/)`)
-// hooks, which nothing uses.
+// A frozen fork of Python phonikud 0.4.1, deliberately not tracking upstream: the
+// snapshot keeps the differential corpus valid. Left out: the digit-and-date
+// expander (never tested end to end, so digits fall out of the stream) and the
+// unused fallback/hyper-phoneme hooks.
 package phonikud
 
 import "strings"
@@ -27,8 +25,7 @@ func Phonemize(text string) string {
 }
 
 func phonemizeWord(word string) string {
-	// Upstream calls mark_vocal_shva here and throws the result away, so it is a
-	// no-op; the marks come from the diacritizer. Replicated by omission.
+	// Upstream's mark_vocal_shva call here is a no-op; marks come from the diacritizer.
 	if !strings.ContainsRune(word, hatamaDiacritic) {
 		word = addMilraHatama(word)
 	}
@@ -43,8 +40,7 @@ func postNormalize(phonemes string) string {
 	for i, word := range words {
 		word = strings.TrimSuffix(word, "ʔ") // no glottal stop at the end
 		word = strings.TrimSuffix(word, "h") // no h at the end
-		// Not redundant with the line above: the first trim leaves a word ending in
-		// two h's as "ˈh", and this takes the stray stress with it. תהה is one.
+		// Not redundant: two final h's leave "ˈh", and this takes the stray stress (תהה).
 		word = strings.TrimSuffix(word, "ˈh")
 		if rest, ok := strings.CutSuffix(word, "ij"); ok {
 			word = rest + "i" // no j after an i
@@ -62,7 +58,7 @@ func postClean(phonemes string) string {
 		switch {
 		case r == '-':
 			b.WriteRune(' ')
-		case setPhonemes[r] || isPunctuation(r):
+		case setPhonemes[r] || strings.ContainsRune(".,!? ", r):
 			b.WriteRune(r)
 		}
 	}

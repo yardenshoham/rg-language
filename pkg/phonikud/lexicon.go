@@ -1,13 +1,8 @@
 package phonikud
 
-// ASCII IPA transcription of Hebrew consonants and vowels, ported verbatim from
-// phonikud's lexicon.py.
-//
-// Combining marks are written as \u escapes throughout this package: as literal
-// characters they attach to whatever precedes them in the source and become
-// impossible to edit reliably.
-//
-// Reference:
+// IPA for Hebrew consonants and vowels, ported verbatim from phonikud's lexicon.py.
+// Combining marks are \u escapes throughout this package: as literal characters they
+// attach to whatever precedes them in source and cannot be edited reliably.
 // https://en.wikipedia.org/wiki/Unicode_and_HTML_for_the_Hebrew_alphabet#Compact_table
 
 // phonikud's extra diacritics. The diacritizer emits the first three; masora and
@@ -92,20 +87,11 @@ var lettersPhonemes = map[string]string{
 
 // nikudPhonemes maps each vowel mark to its sound.
 var nikudPhonemes = map[rune]string{
-	hirik:              "i",
-	hatafSegol:         "e",
-	tsere:              "e",
-	segol:              "e",
-	hatafPatah:         "a",
-	patah:              "a",
-	kamatzKatan:        "o",
-	holam:              "o",
-	holamHaser:         "o", // for vav
-	kubuts:             "u",
-	hatafKamatz:        "o",
-	kamatz:             "a",
-	hatamaDiacritic:    stressPhoneme,
-	vocalShvaDiacritic: "e",
+	hirik: "i", kubuts: "u", vocalShvaDiacritic: "e",
+	hatafSegol: "e", tsere: "e", segol: "e",
+	hatafPatah: "a", patah: "a", kamatz: "a",
+	holam: "o", holamHaser: "o", hatafKamatz: "o", kamatzKatan: "o", // holamHaser: vav only
+	hatamaDiacritic: stressPhoneme,
 }
 
 // isEnhancedDiacritic reports a mark meaningful to the transducer but not part of
@@ -114,8 +100,7 @@ func isEnhancedDiacritic(r rune) bool {
 	return r == hatamaDiacritic || r == prefixDiacritic || r == vocalShvaDiacritic
 }
 
-// setPhonemes is every character that may appear in the output, derived from the
-// tables above exactly as phonikud derives it. Anything else is dropped.
+// setPhonemes is every output character, derived from the tables as phonikud does it.
 var setPhonemes = func() map[rune]bool {
 	set := map[rune]bool{}
 	add := func(s string) {
@@ -136,7 +121,3 @@ var setPhonemes = func() map[rune]bool {
 	}
 	return set
 }()
-
-func isPunctuation(r rune) bool {
-	return r == '.' || r == ',' || r == '!' || r == '?' || r == ' '
-}

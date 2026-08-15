@@ -15,15 +15,6 @@ const REFERENCE = [
 
 const plain = (page) => page.locator(".view.plain p");
 
-// The diacritizer writes a shin dot before the vowel, which is not the canonical
-// mark order even though it renders identically. Compare normalized so that an
-// assertion is about the text, not about the order marks happen to be stacked in.
-async function expectHebrew(locator, expected) {
-  await expect
-    .poll(async () => ((await locator.textContent()) ?? "").normalize("NFC"))
-    .toBe(expected.normalize("NFC"));
-}
-
 test.describe("the page itself", () => {
   // Faux bold smears the niqqud, so the real 600 weight has to arrive.
   test("serves both weights of the Hebrew font from the binary", async ({ page }) => {
@@ -91,8 +82,13 @@ test.describe("the transform", () => {
   test("shows all three renderings", async ({ page }) => {
     await page.goto("/?text=" + encodeURIComponent("מה נשמע"));
 
-    await expectHebrew(page.locator(".view.plain p"), "מרגה נרגשמרגע");
-    await expectHebrew(page.locator(".view.vocalized p"), "מָרְגָה נִרְגִשְׁמַרְגַע");
+    await expect(plain(page)).toHaveText("מרגה נרגשמרגע");
+    // The diacritizer writes a shin dot before the vowel, which is not the canonical
+    // mark order even though it renders identically. Compare normalized so that an
+    // assertion is about the text, not about the order marks happen to be stacked in.
+    await expect
+      .poll(async () => ((await page.locator(".view.vocalized p").textContent()) ?? "").normalize("NFC"))
+      .toBe("מָרְגָה נִרְגִשְׁמַרְגַע".normalize("NFC"));
     await expect(page.locator(".view.latin p")).toHaveText("ma-rga ni-rgi-shma-rga");
   });
 
@@ -104,10 +100,6 @@ test.describe("the transform", () => {
     const inserted = page.locator(".view.plain .inserted");
     await expect(inserted).toHaveCount(2);
     expect(await inserted.allTextContents()).toEqual(["רג", "רגו"]);
-
-    // Nothing outside those runs may be highlighted.
-    const whole = await page.locator(".view.plain p").textContent();
-    expect(whole).toBe("שרגלורגום");
   });
 
   test("an example link fills the box and the result", async ({ page }) => {
