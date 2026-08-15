@@ -17,17 +17,14 @@ const env = {
 };
 
 export default defineConfig({
-  testDir: ".",
   outputDir: path.join(root, "debug/e2e-results"),
   reporter: [["list"], ["html", { outputFolder: path.join(root, "debug/e2e-report"), open: "never" }]],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: 0,
   use: {
     baseURL,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
-    // The site is Hebrew; make the browser ask for it.
     locale: "he-IL",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

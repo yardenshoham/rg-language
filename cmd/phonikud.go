@@ -15,8 +15,6 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
-// row is one line of JSON output; the field names match the corpus, so a run diffs
-// straight against testdata/corpus.jsonl.
 type row struct {
 	Vocalized string `json:"vocalized"`
 	IPA       string `json:"ipa"`
@@ -46,8 +44,7 @@ func (r row) write(w io.Writer) {
 	}
 }
 
-// newPhonikudCmd exposes everything below the diacritizer: pure string handling, so it
-// needs neither the models nor the ONNX Runtime — the quick way to check a rule.
+// newPhonikudCmd needs no model and no ONNX Runtime: the quick way to check a rule.
 func newPhonikudCmd() *cobra.Command {
 	var (
 		asJSON      bool

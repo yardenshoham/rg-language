@@ -66,19 +66,9 @@ type Diacritizer struct {
 	sep     int64
 }
 
-// New loads the diacritizer at modelPath.
 func New(ctx context.Context, modelPath string) (*Diacritizer, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := onnx.Init(); err != nil {
-		return nil, err
-	}
-
 	var tokenizer struct {
-		Model struct {
-			Vocab map[string]int64 `json:"vocab"`
-		} `json:"model"`
+		Model struct{ Vocab map[string]int64 }
 	}
 	if err := json.Unmarshal(tokenizerJSON, &tokenizer); err != nil {
 		return nil, fmt.Errorf("parsing tokenizer: %w", err)
@@ -92,15 +82,9 @@ func New(ctx context.Context, modelPath string) (*Diacritizer, error) {
 		}
 	}
 
-	options, err := onnx.SessionOptions()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = options.Destroy() }()
-
-	session, err := ort.NewDynamicAdvancedSession(modelPath,
+	session, err := onnx.Session(ctx, modelPath,
 		[]string{"input_ids", "attention_mask", "token_type_ids"},
-		[]string{"nikud_logits", "shin_logits", "additional_logits"}, options)
+		[]string{"nikud_logits", "shin_logits", "additional_logits"})
 	if err != nil {
 		return nil, fmt.Errorf("loading diacritizer %s: %w", modelPath, err)
 	}
@@ -121,19 +105,17 @@ func (d *Diacritizer) AddDiacritics(text string) (string, error) {
 	return b.String(), nil
 }
 
-// chunks splits text so no piece exceeds the model's context window, preferring
-// to break after a full stop or a newline.
+// chunks stays under the model's context window, preferring a break after a stop
+// or a newline.
 func chunks(text string) []string {
 	runes := []rune(text)
 	if len(runes) <= maxChunkRunes {
 		return []string{text}
 	}
 
-	// Where a chunk may start, for 1 <= i <= len(runes): the end of the text, or
-	// either side of a full stop or newline.
+	// For 1 <= i <= len(runes): the end, or either side of a full stop or newline.
 	breakable := func(i int) bool {
-		return i == len(runes) || runes[i] == '.' || runes[i] == '\n' ||
-			runes[i-1] == '.' || runes[i-1] == '\n'
+		return i == len(runes) || strings.ContainsRune(".\n", runes[i]) || strings.ContainsRune(".\n", runes[i-1])
 	}
 
 	var out []string
@@ -167,11 +149,9 @@ func isAllowed(r rune) bool {
 		(r >= 0xfb00 && r <= 0xfb4f)
 }
 
-// fold applies the model's normalizer to one character — NFKC, lowercase, drop
-// combining marks — and reports whether the result is a single character in the
-// model's alphabet. The order matters: marks are dropped WITHOUT decomposing
-// first, so a precomposed ŭ keeps its breve and falls outside the alphabet.
-// Reversing that changes the token ids, and so the model's predictions.
+// fold applies the model's normalizer to one character. The order matters: marks are
+// dropped WITHOUT decomposing first, so a precomposed ŭ keeps its breve and falls
+// outside the alphabet. Reversing that changes the token ids, and so the predictions.
 func fold(r rune) (string, bool) {
 	var b strings.Builder
 	for _, c := range strings.ToLower(norm.NFKC.String(string(r))) {
@@ -184,9 +164,8 @@ func fold(r rune) (string, bool) {
 	return folded, len(runes) == 1 && isAllowed(runes[0])
 }
 
-// tokenize turns the sentence into one token per character. Two cases are not
-// one-to-one: a character the normalizer deletes gets no token, and a run outside
-// the model's alphabet becomes one unknown token.
+// tokenize turns the sentence into one token per character, except that a deleted
+// character gets no token and an unrepresentable run becomes one unknown token.
 //
 // Known, accepted divergence from upstream: fold works per character, so the ﬁ
 // ligature splits, a base letter plus a combining accent is not composed first, and
@@ -229,13 +208,12 @@ func (d *Diacritizer) predict(b *strings.Builder, sentence string) error {
 	tokens := d.tokenize(runes)
 
 	ids := make([]int64, len(tokens))
-	mask := make([]int64, len(tokens))
 	for i, t := range tokens {
-		ids[i], mask[i] = t.id, 1
+		ids[i] = t.id
 	}
-	types := make([]int64, len(tokens))
 
 	shape := ort.NewShape(1, int64(len(tokens)))
+	mask, types := slices.Repeat([]int64{1}, len(tokens)), make([]int64, len(tokens))
 	var inputs []ort.Value
 	for _, data := range [][]int64{ids, mask, types} {
 		tensor, err := ort.NewTensor(shape, data)
@@ -250,9 +228,7 @@ func (d *Diacritizer) predict(b *strings.Builder, sentence string) error {
 	if err := d.session.Run(inputs, outputs); err != nil {
 		return fmt.Errorf("running diacritizer: %w", err)
 	}
-	for _, output := range outputs {
-		defer onnx.Destroy(output)
-	}
+	defer onnx.Destroy(outputs...)
 
 	rows, err := logits(outputs)
 	if err != nil {

@@ -47,14 +47,11 @@ func Load(tb testing.TB, path string) []Item {
 	return items
 }
 
-// ModelsDir is where the checkpoints live; they are not in the repo.
-func ModelsDir() string { return cmp.Or(os.Getenv("RG_MODELS_DIR"), "/models") }
-
-// Model opens file from ModelsDir, skipping the test when it is not there — the
+// Model opens file from $RG_MODELS_DIR, skipping the test when it is not there — the
 // checkpoints are a download, not a checkout — and closing it when the test ends.
 func Model[T interface{ Close() error }](tb testing.TB, file string, open func(context.Context, string) (T, error)) T {
 	tb.Helper()
-	dir := ModelsDir()
+	dir := cmp.Or(os.Getenv("RG_MODELS_DIR"), "/models")
 	m, err := open(tb.Context(), filepath.Join(dir, file))
 	if err != nil {
 		tb.Skipf("no %s in %s, set RG_MODELS_DIR: %v", file, dir, err)

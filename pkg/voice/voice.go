@@ -55,23 +55,9 @@ type Voice struct {
 	sampleRate int
 }
 
-// New loads the voice checkpoint at modelPath.
 func New(ctx context.Context, modelPath string) (*Voice, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if err := onnx.Init(); err != nil {
-		return nil, err
-	}
-
-	options, err := onnx.SessionOptions()
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = options.Destroy() }()
-
-	session, err := ort.NewDynamicAdvancedSession(modelPath,
-		[]string{"x", "x_lengths", "scales"}, []string{"wav", "wav_lengths"}, options)
+	session, err := onnx.Session(ctx, modelPath,
+		[]string{"x", "x_lengths", "scales"}, []string{"wav", "wav_lengths"})
 	if err != nil {
 		return nil, fmt.Errorf("loading voice %s: %w", modelPath, err)
 	}
@@ -84,9 +70,9 @@ func New(ctx context.Context, modelPath string) (*Voice, error) {
 	return v, nil
 }
 
-// readMetadata takes the symbol table and the sample rate from the checkpoint itself.
-// Matcha embeds both, which is why this package ships no config file: a table carried
-// by the checkpoint it was trained with cannot drift apart from it.
+// readMetadata takes the symbol table and the sample rate from the checkpoint, which
+// is why this package ships no config file: a table carried by the checkpoint it was
+// trained with cannot drift apart from it.
 func (v *Voice) readMetadata() error {
 	meta, err := v.session.GetModelMetadata()
 	if err != nil {
@@ -95,13 +81,10 @@ func (v *Voice) readMetadata() error {
 	defer func() { _ = meta.Destroy() }()
 
 	// A key the checkpoint does not carry reads back empty and fails the parse below.
-	lookup := func(key string) string {
-		value, _, _ := meta.LookupCustomMetadataMap(key)
-		return value
-	}
+	table, _, _ := meta.LookupCustomMetadataMap("matcha.symbols")
 
 	var symbols []string
-	if err := json.Unmarshal([]byte(lookup("matcha.symbols")), &symbols); err != nil {
+	if err := json.Unmarshal([]byte(table), &symbols); err != nil {
 		return fmt.Errorf("parsing matcha.symbols, so this is not a Matcha checkpoint: %w", err)
 	}
 	v.ids = make(map[rune]int64, len(symbols))
@@ -113,7 +96,7 @@ func (v *Voice) readMetadata() error {
 		}
 	}
 
-	rate := lookup("matcha.sample_rate")
+	rate, _, _ := meta.LookupCustomMetadataMap("matcha.sample_rate")
 	if v.sampleRate, err = strconv.Atoi(rate); err != nil {
 		return fmt.Errorf("parsing matcha.sample_rate %q: %w", rate, err)
 	}
@@ -122,8 +105,8 @@ func (v *Voice) readMetadata() error {
 
 func (v *Voice) Close() error { return v.session.Destroy() }
 
-// phonemeIDs maps IPA to symbol ids, with a blank before, between and after every one.
-// Unknown phonemes are dropped. Iterates runes — every IPA symbol here is multi-byte.
+// phonemeIDs blank-interleaves the symbol ids, dropping unknowns. Runes, not bytes:
+// every IPA symbol here is multi-byte.
 func (v *Voice) phonemeIDs(ipa string) []int64 {
 	ids := make([]int64, 1, 2*len([]rune(ipa))+1)
 	ids[0] = blank
@@ -150,16 +133,13 @@ func (v *Voice) Synth(ipa string) ([]byte, error) {
 	}
 	// After the check, never before: Destroy dereferences its receiver.
 	inputs := []ort.Value{x, lengths, scales}
-	for _, in := range inputs {
-		defer onnx.Destroy(in)
-	}
+	defer onnx.Destroy(inputs...)
 
 	outputs := []ort.Value{nil, nil}
 	if err := v.session.Run(inputs, outputs); err != nil {
 		return nil, fmt.Errorf("running voice: %w", err)
 	}
-	defer onnx.Destroy(outputs[0])
-	defer onnx.Destroy(outputs[1])
+	defer onnx.Destroy(outputs...)
 
 	samples, ok := outputs[0].(*ort.Tensor[float32])
 	if !ok {
@@ -195,10 +175,9 @@ func wav(samples []float32, sampleRate int) []byte {
 	var b bytes.Buffer
 	b.Grow(44 + int(dataLen))
 	for _, field := range []any{
-		[4]byte{'R', 'I', 'F', 'F'}, 36 + dataLen, [4]byte{'W', 'A', 'V', 'E'},
-		[4]byte{'f', 'm', 't', ' '}, uint32(16), uint16(1), uint16(1),
-		uint32(sampleRate), uint32(sampleRate * 2), uint16(2), uint16(16),
-		[4]byte{'d', 'a', 't', 'a'}, dataLen, pcm,
+		[]byte("RIFF"), 36 + dataLen, []byte("WAVE"), []byte("fmt "), uint32(16),
+		uint16(1), uint16(1), uint32(sampleRate), uint32(sampleRate * 2), uint16(2),
+		uint16(16), []byte("data"), dataLen, pcm,
 	} {
 		// A bytes.Buffer never fails to write.
 		_ = binary.Write(&b, binary.LittleEndian, field)

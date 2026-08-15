@@ -96,18 +96,12 @@ func hebrewSegments(segments []rg.Segment) g.Node {
 	})
 }
 
-// latinSyllables hyphenates and tints the inserted syllables, which under a
-// maximal-onset split are exactly those starting with רג.
 func latinSyllables(words [][]heb.Syllable) g.Node {
-	nodes := make(g.Group, 0, len(words))
+	var nodes g.Group
 	for i, word := range words {
-		if i > 0 {
-			nodes = append(nodes, g.Text(" "))
-		}
+		nodes = append(nodes, g.If(i > 0, g.Text(" ")))
 		for j, syllable := range word {
-			if j > 0 {
-				nodes = append(nodes, g.Text("-"))
-			}
+			nodes = append(nodes, g.If(j > 0, g.Text("-")))
 			switch {
 			case syllable.Inserted:
 				nodes = append(nodes, html.Span(html.Class("inserted"), g.Text(syllable.Text)))

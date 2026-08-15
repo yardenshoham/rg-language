@@ -42,16 +42,13 @@ func newWebCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("invalid RG_AUDIO_CACHE_MB: %w", err)
 				}
-				if mb > 0 {
-					audioCacheMB = mb
-				}
+				audioCacheMB = max(mb, 0)
 			}
 
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
-			// Loading takes a few seconds, and it happens before the port opens so a
-			// deployment never takes traffic it cannot serve yet.
+			// Before the port opens, so a deployment never takes traffic it cannot serve.
 			started := time.Now()
 			logger.Info("loading models", "dir", modelsDir)
 			p, err := pipeline.New(ctx, modelsDir, audioCacheMB)
@@ -69,19 +66,14 @@ func newWebCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&addr, "addr", listenAddr(), "Listen address ($RG_ADDR, or $PORT)")
+	// Railway injects PORT.
+	cmd.Flags().StringVar(&addr, "addr", cmp.Or(os.Getenv("RG_ADDR"), ":"+cmp.Or(os.Getenv("PORT"), "25256")), "Listen address ($RG_ADDR, or $PORT)")
 	cmd.Flags().StringVar(&modelsDir, "models", defaultModelsDir(), "Directory holding the two .onnx models ($RG_MODELS_DIR)")
 	cmd.Flags().IntVar(&audioCacheMB, "audio-cache-mb", 0, "Megabytes of synthesized audio to keep in memory ($RG_AUDIO_CACHE_MB)")
-	// Analytics are opt-in: with no key the site serves no tracking script at all.
 	cmd.Flags().StringVar(&config.PostHogKey, "posthog-key", os.Getenv("RG_POSTHOG_KEY"), "PostHog project API key; enables analytics ($RG_POSTHOG_KEY)")
 	cmd.Flags().StringVar(&config.PostHogHost, "posthog-host", os.Getenv("RG_POSTHOG_HOST"), "PostHog ingestion host ($RG_POSTHOG_HOST)")
 	cmd.Flags().StringVar(&config.PostHogUIHost, "posthog-ui-host", os.Getenv("RG_POSTHOG_UI_HOST"), "PostHog dashboard host, for links when the ingestion host is a proxy ($RG_POSTHOG_UI_HOST)")
 	return cmd
-}
-
-// listenAddr resolves the address from the environment; Railway injects PORT.
-func listenAddr() string {
-	return cmp.Or(os.Getenv("RG_ADDR"), ":"+cmp.Or(os.Getenv("PORT"), "25256"))
 }
 
 func defaultModelsDir() string { return cmp.Or(os.Getenv("RG_MODELS_DIR"), "/models") }

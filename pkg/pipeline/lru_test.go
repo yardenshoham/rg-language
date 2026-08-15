@@ -16,7 +16,6 @@ func TestLRUEvictsByCost(t *testing.T) {
 	c.put("a", "12345")
 	c.put("b", "12345")
 
-	// Both fit exactly.
 	if _, ok := c.get("a"); !ok {
 		t.Error("a was evicted while it still fit")
 	}

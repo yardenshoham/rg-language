@@ -25,8 +25,7 @@ var staticFiles embed.FS
 // maxInputRunes bounds what one request may ask the models to do.
 const maxInputRunes = 500
 
-// Config carries the server's optional settings. The zero value is a complete
-// site; everything here is off unless it is configured.
+// Config is the server's optional settings; the zero value is a complete site.
 type Config = pages.Analytics
 
 type Server struct {
@@ -36,8 +35,7 @@ type Server struct {
 	analytics pages.Analytics
 }
 
-// NewServer registers all routes. The pipeline is loaded before the port opens, so
-// both models are resident by the time anything can reach these handlers.
+// NewServer runs after the models load, so every handler here has both resident.
 func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server {
 	s := &Server{logger: logger, pipeline: p, analytics: config}
 	mux := http.NewServeMux()
@@ -57,9 +55,7 @@ func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server
 		func(_ string, result pipeline.Result) g.Node { return pages.Result(result) }))
 	// A ServeMux wildcard spans a whole segment, so .wav comes off in the handler.
 	mux.HandleFunc("GET /audio/{name}", s.handleAudio)
-	mux.HandleFunc("GET /about", func(w http.ResponseWriter, _ *http.Request) {
-		s.render(w, "about page", pages.About(s.analytics))
-	})
+	mux.HandleFunc("GET /about", func(w http.ResponseWriter, _ *http.Request) { s.render(w, "about page", pages.About(s.analytics)) })
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
 
 	s.Handler = s.instrument(mux)
@@ -85,8 +81,7 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	}
 }
 
-// render writes n as HTML. The charset is not optional: without it browsers guess
-// and Hebrew comes out as mojibake.
+// render writes n as HTML. The charset is not optional: without it Hebrew is mojibake.
 func (s *Server) render(w http.ResponseWriter, what string, n g.Node) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := n.Render(w); err != nil {
@@ -102,9 +97,8 @@ func (s *Server) transformed(what string, page func(string, pipeline.Result) g.N
 		if runes := []rune(text); len(runes) > maxInputRunes {
 			text = string(runes[:maxInputRunes])
 		}
-		// Keep the address bar in step with the box, so the URL is always
-		// shareable. The bounded text is what goes in, so a shared link cannot
-		// ask for more than the box allowed.
+		// Keep the address bar in step with the box so the URL stays shareable. The
+		// bounded text is what goes in, so a shared link cannot ask for more.
 		if r.Header.Get("HX-Request") != "" {
 			shareable := "/"
 			if text != "" {

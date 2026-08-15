@@ -63,8 +63,7 @@ func TestPhonemizeTrimsWordEndings(t *testing.T) {
 	tests := []struct {
 		name, in, want string
 	}{
-		// Two h's: the first trim leaves "ˈh" and the second takes the stray stress
-		// with it. Dropping it as redundant leaves a phantom consonant.
+		// Two h's: the first trim leaves "ˈh" and the second takes the stray stress with it.
 		{"double he", "זהה", "z"},
 		{"double he, taf", "תהה", "t"},
 		{"double he with a yod", "תהיה", "t"},

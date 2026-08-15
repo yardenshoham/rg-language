@@ -10,8 +10,7 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/pipeline"
 )
 
-// newSayCmd transforms one phrase and optionally writes the audio, so the pipeline
-// can be checked by ear — the only instrument that has ever worked here.
+// newSayCmd checks the pipeline by ear — the only instrument that has ever worked here.
 func newSayCmd() *cobra.Command {
 	var out string
 

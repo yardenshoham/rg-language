@@ -1,35 +1,10 @@
 package pipeline
 
 import (
-	_ "embed"
-	"encoding/json"
-	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/yardenshoham/rg-language/pkg/rg"
-)
-
-//go:embed lexicon.json
-var lexiconJSON []byte
-
-// Marks phonikud recognises: niqqud, ole, masora, the prefix bar, the geresh.
-const markClass = `\x{05ab}\x{05af}\x{05b0}-\x{05c7}|'`
-
-var (
-	// Each character as group 1, the marks stacked on it as group 2.
-	clusterPattern = regexp.MustCompile(`(?s)(.)([` + markClass + `]*)`)
-	markPattern    = regexp.MustCompile(`[` + markClass + `]`)
-
-	// lexicon pins the niqqud of words the diacritizer gets wrong — the intended fix
-	// for every future one, baked in and changed by redeploying. Overriding here and
-	// not at the IPA level keeps every later stage on the normal path.
-	lexicon = func() map[string]string {
-		var entries map[string]string
-		if err := json.Unmarshal(lexiconJSON, &entries); err != nil {
-			panic("lexicon.json is not valid JSON: " + err.Error())
-		}
-		return entries
-	}()
 )
 
 const (
@@ -39,7 +14,25 @@ const (
 	dagesh   = '\u05bc'
 )
 
+// lexicon pins the niqqud of words the diacritizer gets wrong — the intended fix for
+// every future one, baked in and changed by redeploying. Overriding here and not at
+// the IPA level keeps every later stage on the normal path.
+var lexicon = map[string]string{
+	"חכמה": "חׇכְמָה",
+	"שוק":  "שׁוּק",
+	"גג":   "גַּג",
+	"בית":  "בַּיִת",
+}
+
+// isMark reports the marks phonikud recognises: niqqud, ole, masora, the prefix bar,
+// the geresh.
+func isMark(r rune) bool {
+	return r >= '\u05b0' && r <= '\u05c7' || strings.ContainsRune("\u05ab\u05af|'", r)
+}
+
 func isHebrewLetter(r rune) bool { return r >= 'א' && r <= 'ת' }
+
+func carriesVowel(r rune) bool { return r == dagesh || r == holam || r == vavHolam }
 
 // NormalizeNiqqud repairs a diacritizer artifact that counts one vowel twice.
 //
@@ -48,40 +41,33 @@ func isHebrewLetter(r rune) bool { return r >= 'א' && r <= 'ת' }
 // vowel is emitted twice: ערוגה -> ʔaʁuuɡa, אורז -> ʔooʁez. The vav's mark is the
 // correct one, so the redundant one is dropped — restoring the standard spelling.
 func NormalizeNiqqud(vocalized string) string {
-	clusters := clusterPattern.FindAllStringSubmatch(vocalized, -1)
-
-	for i := range len(clusters) - 1 {
-		cur, next := clusters[i], clusters[i+1]
-		if next[1] != "ו" || cur[1] == "ו" {
-			continue
+	runes := []rune(vocalized)
+	prev := -1 // head of the previous letter-plus-marks cluster
+	for i := 0; i < len(runes); i++ {
+		head := i
+		for i+1 < len(runes) && isMark(runes[i+1]) {
+			i++
 		}
-		if runes := []rune(cur[1]); len(runes) != 1 || !isHebrewLetter(runes[0]) {
-			continue
+		if runes[head] == 'ו' && prev >= 0 && runes[prev] != 'ו' && isHebrewLetter(runes[prev]) &&
+			slices.ContainsFunc(runes[head+1:i+1], carriesVowel) {
+			marks := runes[prev+1 : head]
+			for _, redundant := range []rune{qubuts, holam} {
+				if at := slices.Index(marks, redundant); at >= 0 {
+					marks[at] = -1 // dropped on the way out
+					break
+				}
+			}
 		}
-		// Does the vav carry its own vowel — shuruk or holam male?
-		if !strings.ContainsAny(next[2], string([]rune{dagesh, holam, vavHolam})) {
-			continue
-		}
-		marks := strings.Replace(cur[2], string(qubuts), "", 1)
-		if marks == cur[2] {
-			marks = strings.Replace(cur[2], string(holam), "", 1)
-		}
-		clusters[i][2] = marks
+		prev = head
 	}
-
-	var b strings.Builder
-	for _, c := range clusters {
-		b.WriteString(c[1])
-		b.WriteString(c[2])
-	}
-	return b.String()
+	return string(slices.DeleteFunc(runes, func(r rune) bool { return r < 0 }))
 }
 
 // ApplyLexicon replaces each word whose bare spelling is pinned in the lexicon.
 func ApplyLexicon(vocalized string) string {
 	words := strings.Split(vocalized, " ")
 	for i, word := range words {
-		if pinned, ok := lexicon[markPattern.ReplaceAllString(word, "")]; ok {
+		if pinned, ok := lexicon[string(slices.DeleteFunc([]rune(word), isMark))]; ok {
 			words[i] = pinned
 		}
 	}
