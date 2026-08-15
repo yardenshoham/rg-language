@@ -23,7 +23,7 @@ var (
 	// letter they follow.
 	lettersRe = regexp.MustCompile(`(\p{L})([\p{M}'|]*)`)
 
-	hePattern = regexp.MustCompile(hePatternText)
+	hePattern = regexp.MustCompile(hePatternText) //nolint:gocritic // the sheva-to-tav range spans marks and letters on purpose
 )
 
 // normalize decomposes, sorts each letter's marks and folds punctuation to ASCII.

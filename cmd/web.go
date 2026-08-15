@@ -55,7 +55,7 @@ func newWebCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("loading models: %w", err)
 			}
-			defer p.Close() //nolint:errcheck // nothing useful to do about it here
+			defer p.Close()
 			logger.Info("models loaded", "took", time.Since(started).Round(time.Millisecond))
 
 			if config.PostHogKey != "" {

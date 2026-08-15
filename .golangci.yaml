@@ -5,9 +5,78 @@ linters:
     - godot
     - paralleltest
     - revive
+    # Correctness.
+    - asasalint
+    - bidichk
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - durationcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - gocheckcompilerdirectives
+    - makezero
+    - nilerr
+    - nilnesserr
+    - noctx
+    - reassign
+    - recvcheck
+    - testableexamples
+    - thelper
+    - tparallel
+    - usetesting
+    - wastedassign
+    # Fewer lines.
+    - dupl
+    - dupword
+    - exptostd
+    - goconst
+    - iface
+    - intrange
+    - mirror
+    - misspell
+    - modernize
+    - nolintlint
+    - predeclared
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - whitespace
+    # Performance.
+    - gocritic
+    - perfsprint
+    - prealloc
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^(fmt\.Print(|f|ln)|print|println)$ # the default pattern
+        - pattern: ^context\.(Background|TODO)$
+          msg: use t.Context() in tests and cmd.Context() in cobra commands
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        # Every one of these wants more lines, not fewer.
+        - deferInLoop
+        - hugeParam
+        - rangeValCopy
+        - unnamedResult
+    usetesting:
+      # The t.Context() rule, mechanized.
+      context-background: true
+      context-todo: true
+    perfsprint:
+      # Fires on three-iteration loops, where a Builder costs more than it saves.
+      concat-loop: false
   exclusions:
     presets:
       - comments
       - std-error-handling
     paths:
       - "^debug/"
+    rules:
+      # Test fixtures repeat by nature, and half the repeats here sit inside a
+      # longer expected-output literal a constant cannot reach anyway.
+      - path: _test\.go
+        linters: [goconst]

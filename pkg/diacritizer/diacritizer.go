@@ -58,7 +58,7 @@ var nikudPattern = regexp.MustCompile(`[\x{0590}-\x{05c7}|]`)
 // Diacritizer is a loaded model. It is safe for concurrent use.
 type Diacritizer struct {
 	session *ort.DynamicAdvancedSession
-	vocab   map[rune]int64
+	vocab   map[string]int64
 	unk     int64
 	cls     int64
 	sep     int64
@@ -73,20 +73,13 @@ func New(ctx context.Context, modelPath string) (*Diacritizer, error) {
 	}
 
 	vocab := tokenizer.Model.Vocab
-	chars := make(map[rune]int64, len(vocab))
-	for token, id := range vocab {
-		if runes := []rune(token); len(runes) == 1 {
-			chars[runes[0]] = id
-		}
-	}
-
 	session, err := onnx.Session(ctx, modelPath,
 		[]string{"input_ids", "attention_mask", "token_type_ids"},
 		[]string{"nikud_logits", "shin_logits", "additional_logits"})
 	if err != nil {
 		return nil, fmt.Errorf("loading diacritizer %s: %w", modelPath, err)
 	}
-	return &Diacritizer{session: session, vocab: chars,
+	return &Diacritizer{session: session, vocab: vocab,
 		unk: vocab["[UNK]"], cls: vocab["[CLS]"], sep: vocab["[SEP]"]}, nil
 }
 
@@ -177,7 +170,7 @@ func (d *Diacritizer) tokenize(runes []rune) []token {
 		case folded == "":
 			i++ // deleted by the normalizer; the text still passes through
 		case known:
-			id, ok := d.vocab[[]rune(folded)[0]]
+			id, ok := d.vocab[folded] // known means one rune, so it can only hit a character token
 			if !ok {
 				id = d.unk
 			}
