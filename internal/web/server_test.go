@@ -1,7 +1,6 @@
 package web_test
 
 import (
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -11,48 +10,31 @@ import (
 	"github.com/yardenshoham/rg-language/internal/web"
 )
 
-// get serves path with no models loaded; headers are name, value pairs.
-func get(t *testing.T, path string, headers ...string) *http.Response {
+// get serves path with no models loaded; headers are name, value pairs. A recorder
+// rather than a real listener, so the whole suite needs no ports and no bodies to close.
+func get(t *testing.T, path string, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	return getWith(t, web.Config{}, path, headers...)
 }
 
-func getWith(t *testing.T, config web.Config, path string, headers ...string) *http.Response {
+func getWith(t *testing.T, config web.Config, path string, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	srv := httptest.NewServer(web.NewServer(slog.New(slog.DiscardHandler), nil, config))
-	t.Cleanup(srv.Close)
-
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+path, nil)
-	if err != nil {
-		t.Fatalf("building request: %v", err)
-	}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	for i := 0; i < len(headers); i += 2 {
 		req.Header.Set(headers[i], headers[i+1])
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET %s: %v", path, err)
-	}
-	t.Cleanup(func() { resp.Body.Close() })
-	return resp
-}
-
-func body(t *testing.T, resp *http.Response) string {
-	t.Helper()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("reading body: %v", err)
-	}
-	return string(b)
+	rec := httptest.NewRecorder()
+	web.NewServer(slog.New(slog.DiscardHandler), nil, config).ServeHTTP(rec, req)
+	return rec
 }
 
 func TestHealth(t *testing.T) {
 	t.Parallel()
-	resp := get(t, "/health")
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
+	rec := get(t, "/health")
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
 	}
-	if got := body(t, resp); got != "ok" {
+	if got := rec.Body.String(); got != "ok" {
 		t.Errorf("body = %q, want %q", got, "ok")
 	}
 }
@@ -60,11 +42,11 @@ func TestHealth(t *testing.T) {
 // Hebrew is mojibake unless the charset is in both header and document.
 func TestHomeIsUTF8Hebrew(t *testing.T) {
 	t.Parallel()
-	resp := get(t, "/")
-	if got := resp.Header.Get("Content-Type"); got != "text/html; charset=utf-8" {
+	rec := get(t, "/")
+	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
 		t.Errorf("Content-Type = %q", got)
 	}
-	page := body(t, resp)
+	page := rec.Body.String()
 	for _, want := range []string{
 		`<meta charset="utf-8">`,
 		`lang="he"`,
@@ -83,11 +65,11 @@ func TestHomeIsUTF8Hebrew(t *testing.T) {
 func TestEmptyTransformClearsTheResult(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"/transform?text=", "/transform", "/transform?text=%20%20"} {
-		resp := get(t, path)
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("GET %s: status = %d, want 200", path, resp.StatusCode)
+		rec := get(t, path)
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s: status = %d, want 200", path, rec.Code)
 		}
-		if got := body(t, resp); got != "" {
+		if got := rec.Body.String(); got != "" {
 			t.Errorf("GET %s: body = %q, want empty", path, got)
 		}
 	}
@@ -97,28 +79,28 @@ func TestEmptyTransformClearsTheResult(t *testing.T) {
 // response says what it should be. A plain navigation is already at its URL.
 func TestHtmxKeepsTheURLShareable(t *testing.T) {
 	t.Parallel()
-	if got := get(t, "/transform?text=%20%20", "HX-Request", "true").Header.Get("HX-Replace-Url"); got != "/" {
+	if got := get(t, "/transform?text=%20%20", "HX-Request", "true").Header().Get("HX-Replace-Url"); got != "/" {
 		t.Errorf("HX-Replace-Url = %q, want %q", got, "/")
 	}
-	if got := get(t, "/transform?text=").Header.Get("HX-Replace-Url"); got != "" {
+	if got := get(t, "/transform?text=").Header().Get("HX-Replace-Url"); got != "" {
 		t.Errorf("HX-Replace-Url = %q on a non-htmx request, want none", got)
 	}
 }
 
 func TestAudioNeedsTheWavSuffix(t *testing.T) {
 	t.Parallel()
-	if resp := get(t, "/audio/deadbeef"); resp.StatusCode != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", resp.StatusCode)
+	if rec := get(t, "/audio/deadbeef"); rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
 	}
 }
 
 func TestAbout(t *testing.T) {
 	t.Parallel()
-	resp := get(t, "/about")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	rec := get(t, "/about")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if page := body(t, resp); !strings.Contains(page, "הכלל") {
+	if page := rec.Body.String(); !strings.Contains(page, "הכלל") {
 		t.Error("about page does not explain the rule")
 	}
 }
@@ -128,18 +110,18 @@ func TestPostHogIsOptIn(t *testing.T) {
 	t.Parallel()
 
 	for _, path := range []string{"/", "/about"} {
-		if page := body(t, get(t, path)); strings.Contains(page, "posthog") {
+		if page := get(t, path).Body.String(); strings.Contains(page, "posthog") {
 			t.Errorf("%s mentions posthog with no key configured", path)
 		}
 	}
 
 	t.Run("configured", func(t *testing.T) {
 		t.Parallel()
-		page := body(t, getWith(t, web.Config{
+		page := getWith(t, web.Config{
 			PostHogKey:    "phc_test",
 			PostHogHost:   "https://m.example.com",
 			PostHogUIHost: "https://eu.posthog.com",
-		}, "/"))
+		}, "/").Body.String()
 		want := `posthog.init("phc_test",{api_host:"https://m.example.com",ui_host:"https://eu.posthog.com",` +
 			`defaults:'2026-05-30',person_profiles:'identified_only'})`
 		if !strings.Contains(page, want) {
@@ -151,7 +133,7 @@ func TestPostHogIsOptIn(t *testing.T) {
 	// there would re-init PostHog on every keystroke.
 	t.Run("fragment", func(t *testing.T) {
 		t.Parallel()
-		if fragment := body(t, getWith(t, web.Config{PostHogKey: "phc_test"}, "/transform?text=")); strings.Contains(fragment, "posthog") {
+		if fragment := getWith(t, web.Config{PostHogKey: "phc_test"}, "/transform?text=").Body.String(); strings.Contains(fragment, "posthog") {
 			t.Error("result fragment carries the analytics script")
 		}
 	})
@@ -160,7 +142,7 @@ func TestPostHogIsOptIn(t *testing.T) {
 	// send events and no assets host to derive.
 	t.Run("default host", func(t *testing.T) {
 		t.Parallel()
-		page := body(t, getWith(t, web.Config{PostHogKey: "phc_test"}, "/about"))
+		page := getWith(t, web.Config{PostHogKey: "phc_test"}, "/about").Body.String()
 		if !strings.Contains(page, `posthog.init("phc_test",{api_host:"https://eu.i.posthog.com",defaults:`) {
 			t.Error("about page does not fall back to the EU cloud host")
 		}
@@ -177,8 +159,8 @@ func TestStaticAssets(t *testing.T) {
 		"/static/fonts/noto-sans-hebrew-400.woff2",
 		"/static/fonts/noto-sans-hebrew-600.woff2",
 	} {
-		if resp := get(t, path); resp.StatusCode != http.StatusOK {
-			t.Errorf("GET %s: status = %d, want 200", path, resp.StatusCode)
+		if rec := get(t, path); rec.Code != http.StatusOK {
+			t.Errorf("GET %s: status = %d, want 200", path, rec.Code)
 		}
 	}
 }

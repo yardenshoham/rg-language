@@ -12,10 +12,12 @@ import (
 
 const Title = "שפת הריש גימל"
 
-// Layout wraps page content in the shared shell. analytics is threaded in
-// rather than kept in a package variable, so two servers in one process — which
-// is what the tests are — cannot see each other's configuration.
+// Layout threads analytics in rather than keeping it in a package variable, so two
+// servers in one process — which is what the tests are — cannot see each other's.
 func Layout(analytics Analytics, title, currentPath string, children ...g.Node) g.Node {
+	link := func(href, text string) g.Node {
+		return html.A(html.Href(href), g.If(currentPath == href, html.Aria("current", "page")), g.Text(text))
+	}
 	return c.HTML5(c.HTML5Props{
 		Title:       title,
 		Description: "כותבים משפט בעברית ומקבלים אותו בשפת הריש גימל, כתוב ומדובר.",
@@ -30,7 +32,7 @@ func Layout(analytics Analytics, title, currentPath string, children ...g.Node) 
 		Body: []g.Node{
 			html.Header(
 				html.A(html.Href("/"), html.H1(g.Text(Title))),
-				navigation(currentPath),
+				html.Nav(link("/", "תרגום"), link("/about", "מה זה")),
 			),
 			html.Main(children...),
 			html.Footer(
@@ -42,12 +44,4 @@ func Layout(analytics Analytics, title, currentPath string, children ...g.Node) 
 			),
 		},
 	})
-}
-
-// navigation is not called Nav: the html package already exports that name.
-func navigation(currentPath string) g.Node {
-	link := func(href, text string) g.Node {
-		return html.A(html.Href(href), g.If(currentPath == href, html.Aria("current", "page")), g.Text(text))
-	}
-	return html.Nav(link("/", "תרגום"), link("/about", "מה זה"))
 }

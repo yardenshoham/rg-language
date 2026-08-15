@@ -155,8 +155,8 @@ one failure was ever attributable to the RG rule itself.
 All of it is milder in sentences than in single words, which is why the site
 nudges you towards sentences.
 
-New diacritizer mistakes are fixed by adding an entry to `pkg/pipeline/lexicon.json`
-and redeploying. Pinning at the niqqud level keeps the phonemes, the transform
+New diacritizer mistakes are fixed by adding an entry to the `lexicon` map in
+`pkg/pipeline/niqqud.go` and redeploying. Pinning at the niqqud level keeps the phonemes, the transform
 and the Hebrew rendering all on the normal path.
 
 ## Disclaimer

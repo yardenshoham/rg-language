@@ -4,6 +4,7 @@
 package pipeline
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -29,11 +30,9 @@ const (
 	VoiceModel       = "matcha-he-en.onnx"
 )
 
-// Cache sizes, in bytes. All three are bounded by bytes, not entries: entry size
-// follows what someone typed — a 500-rune request retains tens of kilobytes — so a
+// Cache sizes in bytes, not entries: an entry is as big as what someone typed, so a
 // count-based bound would let unauthenticated traffic pin unbounded memory. Ids are
-// far smaller than audio, so an equal budget holds many more; running out of them
-// means 404s for links this process handed out.
+// far smaller than audio, so an equal budget holds many more.
 const (
 	transformCacheBytes = 64 << 20
 	audioIDCacheBytes   = 64 << 20
@@ -89,9 +88,8 @@ type Pipeline struct {
 	modelSlot    chan struct{}
 }
 
-// modelWork runs fn under the single model slot, on its own deadline: with
-// singleflight, cancelling the request that started shared work would cancel it for
-// every waiter.
+// modelWork takes its own deadline: with singleflight, cancelling the request that
+// started shared work would cancel it for every waiter.
 func modelWork[V any](p *Pipeline, fn func() (V, error)) (V, error) {
 	select {
 	case p.modelSlot <- struct{}{}:
@@ -130,13 +128,10 @@ func cachedOnce[V any](ctx context.Context, group *singleflight.Group, cache *lr
 	}
 }
 
-// New loads both models from modelsDir, bounding cached audio to audioCacheMB (zero
-// picks a default). It takes a few seconds — most of the process's startup.
+// New takes a few seconds — most of the process's startup. audioCacheMB zero picks
+// the default.
 func New(ctx context.Context, modelsDir string, audioCacheMB int) (*Pipeline, error) {
-	audioBytes := int64(audioCacheMB) << 20
-	if audioBytes <= 0 {
-		audioBytes = defaultAudioBytes
-	}
+	audioBytes := cmp.Or(max(int64(audioCacheMB)<<20, 0), int64(defaultAudioBytes))
 
 	d, err := diacritizer.New(ctx, filepath.Join(modelsDir, DiacritizerModel))
 	if err != nil {
@@ -158,16 +153,13 @@ func New(ctx context.Context, modelsDir string, audioCacheMB int) (*Pipeline, er
 	}, nil
 }
 
-// Close releases both models. It waits for any inference already running, since
-// destroying a session out from under a call into it is a use-after-free.
+// Close waits for any inference already running: destroying a live session is a
+// use-after-free. The slot is never handed back, so nothing can start after this.
 func (p *Pipeline) Close() error {
 	select {
 	case p.modelSlot <- struct{}{}:
-		defer func() { <-p.modelSlot }()
-	case <-time.After(modelTimeout):
-		// Only reachable if a unit of work is wedged; better than hanging.
+	case <-time.After(modelTimeout): // only if a unit of work is wedged; better than hanging
 	}
-
 	return errors.Join(p.diacritizer.Close(), p.voice.Close())
 }
 
@@ -186,6 +178,7 @@ func (p *Pipeline) Transform(ctx context.Context, text string) (Result, error) {
 		vocalized := ApplyLexicon(NormalizeNiqqud(raw))
 		ipa := phonikud.Phonemize(vocalized)
 		rgIPA := rg.Transform(ipa, rg.StressFirst)
+		sum := sha256.Sum256([]byte(voice.Fingerprint + "\x00" + rgIPA))
 
 		out := Result{
 			Input:     text,
@@ -194,18 +187,11 @@ func (p *Pipeline) Transform(ctx context.Context, text string) (Result, error) {
 			RGIPA:     rgIPA,
 			Hebrew:    heb.RGSegments(vocalized),
 			Syllables: heb.Syllables(rgIPA),
-			AudioHash: audioHash(rgIPA),
+			AudioHash: hex.EncodeToString(sum[:16]),
 		}
 		p.audioIDs.put(out.AudioHash, rgIPA)
 		return out, nil
 	})
-}
-
-// audioHash addresses audio by content — phonemes plus synthesis parameters —
-// which is what lets the route be served immutable.
-func audioHash(rgIPA string) string {
-	sum := sha256.Sum256([]byte(voice.Fingerprint + "\x00" + rgIPA))
-	return hex.EncodeToString(sum[:16])
 }
 
 // Audio returns the WAV for a hash handed out by Transform, synthesizing it on first

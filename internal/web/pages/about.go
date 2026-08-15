@@ -5,7 +5,6 @@ import (
 	"maragu.dev/gomponents/html"
 )
 
-// About explains the rule and is honest about what the voice cannot do.
 func About(analytics Analytics) g.Node {
 	return Layout(analytics, "מה זה — "+Title, "/about",
 		html.H2(g.Text("הכלל")),

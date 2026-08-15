@@ -81,7 +81,6 @@ func TestTrim(t *testing.T) {
 func TestWAVHeader(t *testing.T) {
 	t.Parallel()
 	const rate = 22050
-	// Two samples plus the 120 ms of trailing silence.
 	out := wav([]float32{0, 1.5, -1.5}, rate)
 
 	silence := rate * tailSilenceMS / 1000
@@ -112,9 +111,8 @@ func TestWAVHeader(t *testing.T) {
 }
 
 // The corpus is the full set of phonemes this pipeline can ever emit, so every one of
-// them has to exist in the checkpoint's own table. A missing symbol is dropped in
-// silence — the word would simply lose a sound — which is exactly the failure a swap
-// to a differently-trained voice would introduce. Needs the model, so it can skip.
+// them must exist in the checkpoint's own table. A missing symbol is dropped in silence
+// — the word loses a sound — exactly the failure a differently-trained voice introduces.
 func TestCheckpointSaysEverythingWeCanEmit(t *testing.T) {
 	t.Parallel()
 	v := corpustest.Model(t, "matcha-he-en.onnx", New)

@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// run executes the CLI with args and returns stdout.
 func run(t *testing.T, stdin string, args ...string) string {
 	t.Helper()
 	var out bytes.Buffer

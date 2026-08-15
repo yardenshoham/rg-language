@@ -42,10 +42,12 @@ run: models onnxruntime
 say: models onnxruntime
 	go run . say $(TEXT)
 
-## The fast suite: no models needed, and it still replays the whole corpus
-## through everything below the diacritizer.
+## The fast suite: no models needed, and it still replays the whole corpus through
+## everything below the diacritizer. The exports above are cleared, or the model tests
+## find the checkpoints and this takes 10x longer. -race is what makes the cache's
+## concurrency test able to fail at all.
 test:
-	go test ./...
+	RG_MODELS_DIR= ONNXRUNTIME_LIB= go test -race ./...
 
 ## Adds the diacritizer, over all 5,012 corpus items. Takes a few minutes.
 test-full: models onnxruntime

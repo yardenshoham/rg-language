@@ -115,7 +115,7 @@ go run . phonikud "חׇכְמָה"              # what it should have produced
 ```
 
 If the correct niqqud gives the right IPA, the diacritizer is at fault, and the
-fix is **an entry in `pkg/pipeline/lexicon.json`** mapping the bare word to its
+fix is **an entry in the `lexicon` map in `pkg/pipeline/niqqud.go`** mapping the bare word to its
 pinned niqqud. Pinning at the niqqud level keeps the phonemes, the transform and
 the Hebrew rendering all on the normal path. Add the entry, then re-run
 `make test`.

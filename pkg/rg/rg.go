@@ -24,22 +24,18 @@ const (
 	// StressSecond stresses the copy. Kept because stress may be word-dependent —
 	// גנן was picked both ways across rounds.
 	StressSecond StressMode = "second"
-	// StressBoth stresses both copies.
-	StressBoth StressMode = "both"
+	StressBoth   StressMode = "both"
 )
 
-// Segment is a run of transformed text; Inserted marks what the rule added, so the
-// UI can highlight it. Built only by package heb: raw IPA is never shown to users,
-// so Transform returns a plain string.
+// Segment is a run of transformed text; Inserted marks what the rule added, for the
+// UI to highlight. Built only by package heb: raw IPA is never shown to users.
 type Segment struct {
 	Text     string
 	Inserted bool
 }
 
-// IsVowel reports whether r is one of the five IPA vowels the rule fires on.
 func IsVowel(r rune) bool { return r == 'a' || r == 'e' || r == 'i' || r == 'o' || r == 'u' }
 
-// Transform applies the RG rule to an IPA string.
 func Transform(ipa string, mode StressMode) string {
 	firstStress, secondStress := "", ""
 	if mode == StressFirst || mode == StressBoth {
@@ -53,8 +49,7 @@ func Transform(ipa string, mode StressMode) string {
 	var b strings.Builder
 	for i := 0; i < len(runes); i++ {
 		v, first, second := string(runes[i]), "", ""
-		// The mark precedes its vowel, so the two move together and mode decides
-		// which copy keeps it.
+		// The mark precedes its vowel, so the two move together.
 		if v == Stress && i+1 < len(runes) && IsVowel(runes[i+1]) {
 			i++
 			v, first, second = string(runes[i]), firstStress, secondStress

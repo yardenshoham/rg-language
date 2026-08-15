@@ -12,36 +12,19 @@ import (
 	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
-// Hebrew marks, by their Unicode names.
+// Hebrew marks by their Unicode names, as escapes because a literal combining mark
+// stacks on its own quote and cannot be proofread. phonikudStress is the diacritizer's
+// "ole", not part of the spelling, so it is dropped before rendering.
 const (
-	shva        = "ְ"
-	hatafSegol  = "ֱ"
-	hatafPatah  = "ֲ"
-	hatafQamats = "ֳ"
-	hiriq       = "ִ"
-	tsere       = "ֵ"
-	segol       = "ֶ"
-	patah       = "ַ"
-	qamats      = "ָ"
-	holam       = "ֹ"
-	holamHaser  = "ֺ"
-	qubuts      = "ֻ"
-	dagesh      = "ּ"
-	meteg       = "ֽ"
-	qamatsQatan = "ׇ"
-
-	// phonikudStress is the diacritizer's "ole" stress mark, not part of the
-	// spelling, so it is dropped before rendering.
-	phonikudStress = "֫"
-
-	yod = "י"
-	vav = "ו"
+	shva, hatafSegol, hatafPatah, hatafQamats = "\u05b0", "\u05b1", "\u05b2", "\u05b3"
+	hiriq, tsere, segol, patah, qamats        = "\u05b4", "\u05b5", "\u05b6", "\u05b7", "\u05b8"
+	holam, holamHaser, qubuts, dagesh, meteg  = "\u05b9", "\u05ba", "\u05bb", "\u05bc", "\u05bd"
+	qamatsQatan, phonikudStress               = "\u05c7", "\u05ab"
+	yod, vav                                  = "\u05d9", "\u05d5"
 )
 
-// vowels maps a vowel mark to its sound and to the spelling the copy in the
-// inserted רג syllable uses. Most are reused verbatim so the copy looks like the
-// vowel it came from; hatafs take their plain form and o/u their vav spelling.
-// Written RG is not standardized — this is the project's own convention.
+// vowels maps a vowel mark to its sound and to the spelling the copy in the inserted
+// רג syllable uses. Written RG is not standardized — this is the project's convention.
 var vowels = map[string]struct{ sound, copied string }{
 	hiriq: {"i", hiriq}, tsere: {"e", tsere}, segol: {"e", segol},
 	patah: {"a", patah}, qamats: {"a", qamats},
@@ -88,7 +71,6 @@ func units(text string) []unit {
 	return us
 }
 
-// RG renders vocalized Hebrew as RG, with niqqud: the pronunciation guide.
 func RG(vocalized string) string {
 	var b strings.Builder
 	for _, s := range RGSegments(vocalized) {
@@ -145,7 +127,6 @@ func RGSegments(vocalized string) []rg.Segment {
 	return segs
 }
 
-// latin transliterates the IPA symbols that a non-phonetician cannot read.
 var latin = strings.NewReplacer(
 	"ʃ", "sh", "χ", "kh", "ʁ", "r", "ɡ", "g", "ʔ", "", "ʒ", "zh", "j", "y",
 )
@@ -169,12 +150,8 @@ func Syllables(ipa string) [][]Syllable {
 			case string(ch) == rg.Stress:
 				stressed = true
 			case rg.IsVowel(ch):
-				// The /ʁɡ/ is in the onset, so pending alone identifies it.
-				syllables = append(syllables, Syllable{
-					Text:     latin.Replace(pending) + string(ch),
-					Stressed: stressed,
-					Inserted: strings.HasPrefix(pending, rg.Insert),
-				})
+				syllables = append(syllables, Syllable{Text: latin.Replace(pending) + string(ch),
+					Stressed: stressed, Inserted: strings.HasPrefix(pending, rg.Insert)})
 				pending, stressed = "", false
 			default:
 				pending += string(ch)

@@ -40,8 +40,7 @@ func TestChunks(t *testing.T) {
 	}
 }
 
-// Marks are stripped without decomposing first, so a precomposed letter keeps its
-// accent and leaves the alphabet. Reversing this silently changes predictions.
+// Fold order is load-bearing: decomposing first would silently change predictions.
 func TestFold(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -92,7 +91,6 @@ func TestTokenize(t *testing.T) {
 		}
 	}
 
-	// A run of unrepresentable characters is one token spanning the whole run.
 	tokens = d.tokenize([]rune("ש😀😀😀ל"))
 	if len(tokens) != 5 {
 		t.Fatalf("got %d tokens, want the emoji run collapsed into one: %+v", len(tokens), tokens)
