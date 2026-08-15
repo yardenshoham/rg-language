@@ -1,4 +1,4 @@
-// Package voice turns IPA phonemes into speech with a Piper VITS checkpoint.
+// Package voice turns IPA phonemes into speech with a Matcha-TTS checkpoint.
 //
 // It is fed phonemes, never text: RG output is nonsense words, and any engine
 // doing its own text-to-phoneme conversion would "correct" them — which is why
@@ -9,60 +9,50 @@ package voice
 import (
 	"bytes"
 	"context"
-	_ "embed"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/yardenshoham/rg-language/pkg/onnx"
 )
 
-//go:embed model.config.json
-var configJSON []byte
-
-// Synthesis parameters, not the checkpoint's defaults. A blind order-balanced A/B
-// against the defaults was a dead tie (4 "no difference", 2 each way); these are
-// kept because all 15 passing human verdicts were collected under them. Changing
-// them needs a new listening round — there is no automated substitute.
+// Synthesis parameters. A blind eight-voice round — the incumbent Piper checkpoint,
+// three other Hebrew Piper voices, Kokoro, Mixer-TTS and Microsoft's he-IL voice, all
+// loudness-matched and lettered — was rendered under exactly these, and this voice was
+// the only one rated good on every sentence. They are the settings that were judged,
+// not the checkpoint's defaults, so changing either needs a new listening round.
 const (
-	noiseScale  = 0.640
-	lengthScale = 1.20
-	noiseW      = 1.0
+	temperature = 0.667
+	lengthScale = 0.70
 )
 
-// Fingerprint identifies the settings above, so audio URLs change if they do.
-const Fingerprint = "n0.640-l1.20-w1.0-tail120"
+// Fingerprint identifies the voice and the settings above, so audio URLs change if any
+// of them do.
+const Fingerprint = "matcha-t0.667-l0.70-tail120"
 
-// Appended to every phoneme string before synthesis. Measured: residual energy in
-// the final 25 ms frame dropped 61% over a 21-word battery — the model stopped
-// ending clips mid-sound — and two human verdicts flipped from bad to ok. It does
-// not fix unreleased word-final stops; nothing available does. The trailing
-// silence guards against players clipping the last samples.
+// Appended to every phoneme string before synthesis. Measured on the previous voice:
+// residual energy in the final 25 ms frame dropped 61% over a 21-word battery — the
+// model stopped ending clips mid-sound — and two human verdicts flipped from bad to ok.
+// The trailing silence guards against players clipping the last samples.
 const (
 	tailPhonemes  = " ."
 	tailSilenceMS = 120
 )
 
-// Piper's symbols: begin, end, and the pad inserted between every phoneme.
-const (
-	bos = "^"
-	eos = "$"
-	pad = "_"
-)
-
-type config struct {
-	Audio struct {
-		SampleRate int `json:"sample_rate"`
-	} `json:"audio"`
-	PhonemeIDMap map[string][]int64 `json:"phoneme_id_map"`
-}
+// blank is Matcha's pad symbol, id 0. It goes before, between and after every phoneme:
+// the model was trained on that interleaving, and a checkpoint trained without it turns
+// into fluent babble at more than twice the right length when given it, so this is not
+// a detail that can be carried over between voices by assumption.
+const blank = 0
 
 // Voice is a loaded synthesis model. It is safe for concurrent use.
 type Voice struct {
-	session *ort.DynamicAdvancedSession
-	cfg     config
+	session    *ort.DynamicAdvancedSession
+	ids        map[rune]int64
+	sampleRate int
 }
 
 // New loads the voice checkpoint at modelPath.
@@ -74,48 +64,97 @@ func New(ctx context.Context, modelPath string) (*Voice, error) {
 		return nil, err
 	}
 
-	var cfg config
-	if err := json.Unmarshal(configJSON, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing voice config: %w", err)
-	}
-
 	session, err := ort.NewDynamicAdvancedSession(modelPath,
-		[]string{"input", "input_lengths", "scales"}, []string{"output"}, nil)
+		[]string{"x", "x_lengths", "scales"}, []string{"wav", "wav_lengths"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("loading voice %s: %w", modelPath, err)
 	}
-	return &Voice{session: session, cfg: cfg}, nil
+
+	v := &Voice{session: session}
+	if err := v.readMetadata(); err != nil {
+		_ = session.Destroy()
+		return nil, err
+	}
+	return v, nil
+}
+
+// readMetadata takes the symbol table and the sample rate from the checkpoint itself.
+// Matcha embeds both, which is why this package ships no config file of its own: a
+// checkpoint and the table it was trained with cannot drift apart if there is only one
+// copy of the table and the checkpoint carries it.
+func (v *Voice) readMetadata() error {
+	meta, err := v.session.GetModelMetadata()
+	if err != nil {
+		return fmt.Errorf("reading voice metadata: %w", err)
+	}
+	defer func() { _ = meta.Destroy() }()
+
+	lookup := func(key string) (string, error) {
+		value, ok, err := meta.LookupCustomMetadataMap(key)
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", key, err)
+		}
+		if !ok {
+			return "", fmt.Errorf("voice is missing %s, so it is not a Matcha checkpoint", key)
+		}
+		return value, nil
+	}
+
+	raw, err := lookup("matcha.symbols")
+	if err != nil {
+		return err
+	}
+	var symbols []string
+	if err := json.Unmarshal([]byte(raw), &symbols); err != nil {
+		return fmt.Errorf("parsing matcha.symbols: %w", err)
+	}
+	v.ids = make(map[rune]int64, len(symbols))
+	for id, symbol := range symbols {
+		// Every symbol in the table is a single rune; anything else could not be
+		// looked up by the rune-at-a-time walk in phonemeIDs anyway.
+		if runes := []rune(symbol); len(runes) == 1 {
+			v.ids[runes[0]] = int64(id)
+		}
+	}
+
+	rate, err := lookup("matcha.sample_rate")
+	if err != nil {
+		return err
+	}
+	if v.sampleRate, err = strconv.Atoi(rate); err != nil {
+		return fmt.Errorf("parsing matcha.sample_rate %q: %w", rate, err)
+	}
+	return nil
 }
 
 // Close releases the model.
 func (v *Voice) Close() error { return v.session.Destroy() }
 
-// phonemeIDs maps IPA to symbol ids: begin, each phoneme then a pad, end. Unknown
-// phonemes are dropped. Iterates runes — every IPA symbol here is multi-byte.
+// phonemeIDs maps IPA to symbol ids, with a blank before, between and after every one.
+// Unknown phonemes are dropped. Iterates runes — every IPA symbol here is multi-byte.
 func (v *Voice) phonemeIDs(ipa string) []int64 {
-	ids := make([]int64, 0, 2*len([]rune(ipa))+2)
-	for _, r := range bos + ipa {
-		id, ok := v.cfg.PhonemeIDMap[string(r)]
+	ids := make([]int64, 1, 2*len([]rune(ipa))+1)
+	ids[0] = blank
+	for _, r := range ipa {
+		id, ok := v.ids[r]
 		if !ok {
 			continue
 		}
-		ids = append(ids, id...)
-		ids = append(ids, v.cfg.PhonemeIDMap[pad]...)
+		ids = append(ids, id, blank)
 	}
-	return append(ids, v.cfg.PhonemeIDMap[eos]...)
+	return ids
 }
 
-// Synth renders IPA phonemes as a mono 16-bit WAV. Piper is stochastic — the graph
-// has a RandomNormalLike node — so callers wanting a phrase to sound the same
-// twice must cache the result.
+// Synth renders IPA phonemes as a mono 16-bit WAV. Matcha samples a noise prior, so
+// callers wanting a phrase to sound the same twice must cache the result.
 func (v *Voice) Synth(ipa string) ([]byte, error) {
 	ids := v.phonemeIDs(ipa + tailPhonemes)
 
-	input, err := ort.NewTensor(ort.NewShape(1, int64(len(ids))), ids)
+	x, err := ort.NewTensor(ort.NewShape(1, int64(len(ids))), ids)
 	if err != nil {
 		return nil, fmt.Errorf("building input tensor: %w", err)
 	}
-	defer onnx.Destroy(input)
+	defer onnx.Destroy(x)
 
 	lengths, err := ort.NewTensor(ort.NewShape(1), []int64{int64(len(ids))})
 	if err != nil {
@@ -123,27 +162,44 @@ func (v *Voice) Synth(ipa string) ([]byte, error) {
 	}
 	defer onnx.Destroy(lengths)
 
-	// The model wants noise, length, noise_w — not the usual prose order.
-	scales, err := ort.NewTensor(ort.NewShape(3), []float32{noiseScale, lengthScale, noiseW})
+	scales, err := ort.NewTensor(ort.NewShape(2), []float32{temperature, lengthScale})
 	if err != nil {
 		return nil, fmt.Errorf("building scales tensor: %w", err)
 	}
 	defer onnx.Destroy(scales)
 
-	outputs := []ort.Value{nil}
-	if err := v.session.Run([]ort.Value{input, lengths, scales}, outputs); err != nil {
+	outputs := []ort.Value{nil, nil}
+	if err := v.session.Run([]ort.Value{x, lengths, scales}, outputs); err != nil {
 		return nil, fmt.Errorf("running voice: %w", err)
 	}
 	defer onnx.Destroy(outputs[0])
+	defer onnx.Destroy(outputs[1])
 
 	samples, ok := outputs[0].(*ort.Tensor[float32])
 	if !ok {
-		return nil, fmt.Errorf("voice returned %T, want a float32 tensor", outputs[0])
+		return nil, fmt.Errorf("voice returned %T for wav, want a float32 tensor", outputs[0])
 	}
-	return wav(samples.GetData(), v.cfg.Audio.SampleRate), nil
+	lens, ok := outputs[1].(*ort.Tensor[int64])
+	if !ok {
+		return nil, fmt.Errorf("voice returned %T for wav_lengths, want an int64 tensor", outputs[1])
+	}
+	return wav(trim(samples.GetData(), lens.GetData()), v.sampleRate), nil
 }
 
-// wav encodes float samples as a mono 16-bit PCM WAV, clipped to [-1, 1].
+// trim cuts the padded output tensor down to the samples the model actually produced.
+func trim(samples []float32, lengths []int64) []float32 {
+	if len(lengths) == 0 {
+		return samples
+	}
+	if n := int(lengths[0]); n >= 0 && n < len(samples) {
+		return samples[:n]
+	}
+	return samples
+}
+
+// wav encodes float samples as a mono 16-bit PCM WAV, clipped to [-1, 1]. The clip is
+// a backstop rather than a working part: the loudest of thirty draws across the
+// reference sentences peaked at 0.988.
 func wav(samples []float32, sampleRate int) []byte {
 	silence := sampleRate * tailSilenceMS / 1000
 	pcm := make([]int16, 0, len(samples)+silence)

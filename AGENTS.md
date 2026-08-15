@@ -34,8 +34,15 @@ and verifies their SHA-256. If a checksum ever fails, stop — the voice was cho
 listening and a silent substitution would invalidate that.
 
 Do not change the synthesis parameters in `pkg/voice` or the `" ."` tail appended before
-synthesis. Both were settled by blind human A/B listening and there is no automated
-substitute for that test.
+synthesis. Both were settled by blind human listening — the voice itself was picked that
+way, over seven others, under exactly the parameters now in the file — and there is no
+automated substitute for that test.
+
+The voice takes its symbol table and sample rate from the checkpoint's own ONNX metadata,
+so this package ships no config file. It also interleaves a blank around every phoneme,
+which is what its checkpoint was trained on; other checkpoints are trained without it and
+turn into fluent babble at more than twice the right length if given it. Phoneme encoding
+does not carry over between voices by assumption.
 
 Always emit `<meta charset="utf-8" />` **and** serve `Content-Type: text/html; charset=utf-8`.
 Missing either renders Hebrew as mojibake.

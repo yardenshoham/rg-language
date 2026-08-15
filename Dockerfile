@@ -2,12 +2,12 @@
 FROM golang:1.26-bookworm AS builder
 
 # BuildKit fetches these itself and fails the build on a digest mismatch. The
-# pins are deliberate: the voice was chosen over six others by human listening,
-# so a silently substituted checkpoint would invalidate every verdict this
-# project rests on. Keep them above the source copy so a code change does not
-# invalidate ~200 MB of cached downloads.
+# pins are deliberate: the voice was chosen over seven others by blind human
+# listening, so a silently substituted checkpoint would invalidate every verdict
+# this project rests on. Keep them above the source copy so a code change does not
+# invalidate ~440 MB of cached downloads.
 ARG ORT_VERSION=1.29.0
-ARG VOICE_REVISION=ff64ba389a3833c49a85c58fc51a7060a6984b87
+ARG VOICE_REVISION=dcca83dc0911c898fbe4bba464fa450a98c4e7a0
 ARG DIACRITIZER_REVISION=b806189fe1fc0085b1012b7560ffb5e8ecfd72a2
 
 ADD --checksum=sha256:c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7cd14ba \
@@ -20,8 +20,8 @@ ADD --checksum=sha256:c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7
 RUN mkdir -p /out/lib \
      && tar -xzf /tmp/ort.tgz -C /out/lib --strip-components=2 --wildcards '*/lib/libonnxruntime.so*'
 
-ADD --chmod=644 --checksum=sha256:592363804a09e3d70b05bd86b366e12e0a12c4a4d0100997cf8f0832132c55e7 \
-     "https://huggingface.co/Phonikud/phonikud-tts-checkpoints/resolve/${VOICE_REVISION}/shaul_whisper_heb_ipa1.onnx" \
+ADD --chmod=644 --checksum=sha256:2489ccaf7a2a8cba57011b56f7479a407ad6c21e7a93eddcf62e4788f5eeae4b \
+     "https://huggingface.co/thewh1teagle/matcha-tts/resolve/${VOICE_REVISION}/matcha-he-en.onnx" \
      /out/models/
 ADD --chmod=644 --checksum=sha256:c1fa2624b1e8202a0c0a23259b560b0c41ad92a3a6750bd0e322ce5a2b1acdb6 \
      "https://huggingface.co/Phonikud/phonikud-onnx/resolve/${DIACRITIZER_REVISION}/phonikud-1.0.onnx" \
