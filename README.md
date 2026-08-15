@@ -63,7 +63,7 @@ be diffed against `pkg/phonikud/testdata/corpus.jsonl` line by line.
 There is a one-shot command, handy for checking output by ear:
 
 ```bash
-go run . say "אני ממש אוהב פיצה" --out debug/pizza.wav
+go run . say "אני ממש אוהב פיצה" --out tmp/pizza.wav
 ```
 
 ```

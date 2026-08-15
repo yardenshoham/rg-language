@@ -56,7 +56,7 @@ run `make models onnxruntime` once first.
 
 ```bash
 make say TEXT='"אני ממש אוהב פיצה"'
-go run . say "מה נשמע" --out debug/hello.wav      # with the env vars already set
+go run . say "מה נשמע" --out tmp/hello.wav        # with the env vars already set
 ```
 
 `make run` starts the site on :25256.
@@ -96,13 +96,17 @@ go test -run TestCorpus ./pkg/phonikud/          # prints the first 10 mismatche
 ```
 
 Regenerating the corpus needs the Python lab in `debug/lab/`, which may not be
-present in a fresh clone. If it is:
+present in a fresh clone. Its virtualenv is not kept around — it is ~5 GB of
+torch and CUDA wheels — so rebuild it from the pinned list first:
 
 ```bash
-cd debug/lab && ./.venv312/bin/python ../gen_corpus.py /tmp/corpus.json
+cd debug/lab
+uv venv --python 3.12 .venv312
+uv pip install --python .venv312/bin/python -r requirements-.venv312.txt
+./.venv312/bin/python ../gen_corpus.py /tmp/corpus.json
 ```
 
-`.venv312` was made by `uv` and has no `pip`; install with
+`.venv312` is made by `uv` and has no `pip`; install into it with
 `uv pip install --python .venv312/bin/python <pkg>`.
 
 ## When a word comes out wrong

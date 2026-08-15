@@ -7,8 +7,8 @@ const port = process.env.RG_E2E_PORT ?? "25256";
 const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
-  outputDir: path.join(root, "debug/e2e-results"),
-  reporter: [["list"], ["html", { outputFolder: path.join(root, "debug/e2e-report"), open: "never" }]],
+  outputDir: path.join(root, "tmp/e2e-results"),
+  reporter: [["list"], ["html", { outputFolder: path.join(root, "tmp/e2e-report"), open: "never" }]],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   use: {

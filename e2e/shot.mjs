@@ -1,8 +1,8 @@
 // Screenshot a page of the running site (`make run` elsewhere, or point --base).
 //
-//   node shot.mjs                              the home page, light, to debug/shot.png
+//   node shot.mjs                              the home page, light, to tmp/shot.png
 //   node shot.mjs --text "מה נשמע" --theme dark
-//   node shot.mjs /about --out debug/about.png --width 420
+//   node shot.mjs /about --out tmp/about.png --width 420
 import { chromium } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +18,7 @@ const flag = (name, fallback) => {
 const base = flag("base", `http://127.0.0.1:${process.env.RG_E2E_PORT ?? "25256"}`);
 const theme = flag("theme", "light");
 const width = Number(flag("width", "900"));
-const out = path.resolve(root, flag("out", "debug/shot.png"));
+const out = path.resolve(root, flag("out", "tmp/shot.png"));
 const text = flag("text", null);
 
 let target = args.find((a) => a.startsWith("/")) ?? "/";

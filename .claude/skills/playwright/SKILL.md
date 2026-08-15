@@ -41,7 +41,7 @@ npx playwright test --ui                 # the time-travel UI
 npm run report                           # open the HTML report after a failure
 ```
 
-Failures leave a screenshot and a trace under `debug/e2e-results/`. Open a trace
+Failures leave a screenshot and a trace under `tmp/e2e-results/`. Open a trace
 with `npx playwright show-trace <path>`.
 
 ## Look at the page
@@ -52,10 +52,10 @@ directly rather than inferring them from the DOM.
 
 ```bash
 cd e2e
-node shot.mjs                                        # home page -> debug/shot.png
-node shot.mjs --text "אני ממש אוהב פיצה" --out debug/home.png
-node shot.mjs --text "מה נשמע" --theme dark --out debug/dark.png
-node shot.mjs /about --width 420 --out debug/about-mobile.png
+node shot.mjs                                        # home page -> tmp/shot.png
+node shot.mjs --text "אני ממש אוהב פיצה" --out tmp/home.png
+node shot.mjs --text "מה נשמע" --theme dark --out tmp/dark.png
+node shot.mjs /about --width 420 --out tmp/about-mobile.png
 ```
 
 Flags: `--text` (fills the box and renders the result), `--theme light|dark`,

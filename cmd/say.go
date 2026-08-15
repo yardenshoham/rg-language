@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -41,6 +42,11 @@ func newSayCmd() *cobra.Command {
 			wav, err := p.Audio(cmd.Context(), result.AudioHash)
 			if err != nil {
 				return err
+			}
+			if dir := filepath.Dir(out); dir != "." {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					return err
+				}
 			}
 			if err := os.WriteFile(out, wav, 0o644); err != nil {
 				return err

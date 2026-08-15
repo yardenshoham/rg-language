@@ -1,5 +1,6 @@
 dist/
 debug/
+tmp/
 rg-language
 PLAN.md
 node_modules/
