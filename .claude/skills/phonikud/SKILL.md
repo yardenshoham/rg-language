@@ -9,7 +9,7 @@ The pipeline splits cleanly in two, and that split is what makes it testable:
 
 ```
 Hebrew text ──diacritizer──> Hebrew + niqqud ──phonikud──> IPA ──rg──> RG IPA ──voice──> WAV
-            └ 300 MB model ┘                 └────── pure string handling ──────┘└ 61 MB model ┘
+            └ 300 MB model ┘                 └────── pure string handling ──────┘└ 131 MB model ┘
 ```
 
 Everything to the right of the niqqud is deterministic string-to-string, so it can
@@ -74,7 +74,8 @@ make lint        # go fmt, go fix, go mod tidy, golangci-lint
 - the 8 reference sentences the project is defined by (`pkg/rg`)
 - the 7 Hebrew spellings (`pkg/heb`)
 - all 5,012 corpus items through phonemize, transform, heb and latin
-- the phoneme ids the voice is fed, against the ids Python produces
+- the blank-interleaved phoneme ids the voice is fed, and that the checkpoint's
+  own symbol table covers every phoneme the corpus can produce (needs the model)
 
 ## The differential corpus
 
@@ -130,13 +131,15 @@ false-flagged 14 of the 15 clips a human had passed. Do not tune anything agains
 a transcriber.
 
 The synthesis parameters in `pkg/voice` and the `" ."` tail appended before
-synthesis were both settled by blind human A/B listening. Do not change either
-without a new listening round.
+synthesis were both settled by blind human listening — the voice itself was
+chosen that way, over seven others, under exactly these parameters. Do not
+change either without a new listening round.
 
 Known voice defects, none of which are the transform's fault: word-final
-ד/ת/ק/ג/ב are often swallowed, vowel colour sometimes drifts on the copied vowel,
-and `רג` is weak in a few words. All are milder in sentences than in single
-words.
+ד/ת/ק/ג/ב can be soft, vowel colour sometimes drifts on the copied vowel, and
+`רג` is weak in a few words. All are milder in sentences than in single words.
+The first of those was the previous voice's worst failing and drove the switch to
+Matcha, so it is improved rather than gone.
 
 ## Traps
 

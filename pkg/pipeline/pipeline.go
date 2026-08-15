@@ -27,7 +27,7 @@ import (
 // silently would invalidate every verdict behind this project.
 const (
 	DiacritizerModel = "phonikud-1.0.onnx"
-	VoiceModel       = "shaul_whisper_heb_ipa1.onnx"
+	VoiceModel       = "matcha-he-en.onnx"
 )
 
 // Cache sizes, in megabytes. All three are bounded by bytes, not entries: entry
@@ -235,8 +235,9 @@ func audioHash(rgIPA string) string {
 }
 
 // Audio returns the WAV for a hash handed out by Transform, synthesizing it on
-// first request. The cache is a correctness feature, not just a speed one: Piper's
-// graph has a random node, so re-synthesis sounds audibly different.
+// first request. The cache is a correctness feature, not just a speed one: the voice
+// samples a noise prior, so re-synthesis of the same phonemes runs the same length but
+// sounds audibly different.
 func (p *Pipeline) Audio(ctx context.Context, hash string) ([]byte, error) {
 	// Ahead of the id lookup: a hot WAV's id is never refreshed, so it can age out
 	// of the id cache while the audio is still here.

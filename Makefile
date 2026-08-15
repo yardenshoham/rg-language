@@ -1,6 +1,6 @@
 # Local development. The container builds everything itself; see Dockerfile.
 ORT_VERSION ?= 1.29.0
-VOICE_REVISION ?= ff64ba389a3833c49a85c58fc51a7060a6984b87
+VOICE_REVISION ?= dcca83dc0911c898fbe4bba464fa450a98c4e7a0
 DIACRITIZER_REVISION ?= b806189fe1fc0085b1012b7560ffb5e8ecfd72a2
 
 DEBUG := debug
@@ -15,12 +15,12 @@ export RG_MODELS_DIR = $(CURDIR)/$(MODELS)
 ## Download the two checkpoints and verify them. A mismatch is fatal: the voice
 ## was chosen by human listening, so a substituted checkpoint would invalidate
 ## every verdict behind this project.
-models: $(MODELS)/shaul_whisper_heb_ipa1.onnx $(MODELS)/phonikud-1.0.onnx
+models: $(MODELS)/matcha-he-en.onnx $(MODELS)/phonikud-1.0.onnx
 
-$(MODELS)/shaul_whisper_heb_ipa1.onnx:
+$(MODELS)/matcha-he-en.onnx:
 	@mkdir -p $(MODELS)
-	curl -fsSL -o $@ "https://huggingface.co/Phonikud/phonikud-tts-checkpoints/resolve/$(VOICE_REVISION)/shaul_whisper_heb_ipa1.onnx"
-	echo "592363804a09e3d70b05bd86b366e12e0a12c4a4d0100997cf8f0832132c55e7  $@" | sha256sum -c -
+	curl -fsSL -o $@ "https://huggingface.co/thewh1teagle/matcha-tts/resolve/$(VOICE_REVISION)/matcha-he-en.onnx"
+	echo "2489ccaf7a2a8cba57011b56f7479a407ad6c21e7a93eddcf62e4788f5eeae4b  $@" | sha256sum -c -
 
 $(MODELS)/phonikud-1.0.onnx:
 	@mkdir -p $(MODELS)

@@ -18,7 +18,7 @@ Hebrew text
   -> lexicon          pin hand-corrected words
   -> phonemize        -> IPA with stress, e.g. ʃalˈom
   -> transform        -> RG IPA,           e.g. ʃaʁɡalˈoʁɡom
-  -> voice            -> 22.05 kHz mono WAV (ONNX Piper)
+  -> voice            -> 22.05 kHz mono WAV (ONNX Matcha-TTS)
 ```
 
 The transform works on IPA rather than on Hebrew letters, which is what makes it
@@ -34,7 +34,7 @@ string-to-string code, pinned byte-for-byte by a 5,012-item corpus in
 
 ## Quick start
 
-The models are not in the repo — they are 371 MB — so fetch them once:
+The models are not in the repo — they are 439 MB — so fetch them once:
 
 ```bash
 make models
@@ -137,8 +137,10 @@ change that touches synthesis needs a person to listen.
 These come from the models, not from the transform — across 34 graded items not
 one failure was ever attributable to the RG rule itself.
 
-- Word-final ד/ת/ק/ג/ב are often swallowed. Eight voices were measured and none
-  release them; nineteen input-level workarounds all failed.
+- Word-final ד/ת/ק/ג/ב can still be soft. This was the previous voice's worst
+  defect — eight voices were measured, none released them, and nineteen
+  input-level workarounds all failed. The current voice was picked in a blind
+  round partly on the sentence built to expose it, so it is better, not solved.
 - Vowel colour sometimes drifts on the copied vowel.
 - Isolated homographs (שוק) and kamatz katan (חכמה) need lexicon entries; in a
   full sentence the diacritizer usually gets them right from context.
@@ -161,5 +163,5 @@ The code is Apache 2.0 — see [`LICENSE`](LICENSE). Copyright Yarden Shoham.
 One exception: `pkg/phonikud` is a fork of the Python `phonikud` transducer, so
 that directory carries its upstream terms too.
 
-The models are separate. The diacritizer is CC BY 4.0. The voice checkpoint is
-**non-commercial**, which is fine for a toy like this one.
+The models are separate. The diacritizer is CC BY 4.0, and the voice checkpoint
+is MIT.
