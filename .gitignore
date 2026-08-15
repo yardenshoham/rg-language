@@ -6,3 +6,4 @@ node_modules/
 prompt.md
 models/
 e2e/test-results/
+.claude/worktrees
