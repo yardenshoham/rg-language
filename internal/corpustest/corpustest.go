@@ -1,7 +1,6 @@
-// Package corpustest reads the differential corpus several packages' tests replay:
-// 5,012 Hebrew items run once through the original Python implementation with every
-// stage recorded. The port is deterministic and the fork frozen, so this pins it
-// byte-for-byte. Its own package because an external test package cannot be imported.
+// Package corpustest reads the differential corpus several packages replay: 5,012 Hebrew items
+// recorded stage by stage from the original Python. The port is deterministic and the fork
+// frozen, so this pins it byte-for-byte; a _test package could not be imported.
 package corpustest
 
 import (
@@ -45,8 +44,7 @@ func Load(tb testing.TB, path string) []Item {
 	return items
 }
 
-// Model opens file from $RG_MODELS_DIR, skipping the test when it is not there — the
-// checkpoints are a download, not a checkout — and closing it when the test ends.
+// Model opens file from $RG_MODELS_DIR — a download, not a checkout — skipping when it is absent and closing at test end.
 func Model[T interface{ Close() error }](tb testing.TB, file string, open func(context.Context, string) (T, error)) T {
 	tb.Helper()
 	dir := cmp.Or(os.Getenv("RG_MODELS_DIR"), "/models")

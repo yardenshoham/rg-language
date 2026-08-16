@@ -19,7 +19,6 @@ type lru[V any] struct {
 type entry[V any] struct {
 	key   string
 	value V
-	cost  int64
 }
 
 func newLRU[V any](limit int64, costOf func(V) int64) *lru[V] {
@@ -33,8 +32,7 @@ func (c *lru[V]) get(key string) (V, bool) {
 		c.order.MoveToFront(element)
 		return element.Value.(*entry[V]).value, true
 	}
-	var zero V
-	return zero, false
+	return *new(V), false
 }
 
 func (c *lru[V]) put(key string, value V) {
@@ -42,16 +40,15 @@ func (c *lru[V]) put(key string, value V) {
 	defer c.mu.Unlock()
 
 	if element, ok := c.entries[key]; ok {
-		c.cost -= c.order.Remove(element).(*entry[V]).cost
+		c.cost -= c.costOf(c.order.Remove(element).(*entry[V]).value)
 	}
-	cost := c.costOf(value)
-	c.entries[key] = c.order.PushFront(&entry[V]{key: key, value: value, cost: cost})
-	c.cost += cost
+	c.entries[key] = c.order.PushFront(&entry[V]{key: key, value: value})
+	c.cost += c.costOf(value)
 
 	// Never evict the entry just added, however big it is.
 	for c.cost > c.limit && c.order.Len() > 1 {
 		evicted := c.order.Remove(c.order.Back()).(*entry[V])
 		delete(c.entries, evicted.key)
-		c.cost -= evicted.cost
+		c.cost -= c.costOf(evicted.value)
 	}
 }

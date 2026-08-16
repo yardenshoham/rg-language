@@ -6,7 +6,6 @@
 package voice
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -103,14 +102,11 @@ func (v *Voice) Close() error { return v.session.Destroy() }
 // phonemeIDs blank-interleaves the symbol ids, dropping unknowns. Runes, not bytes:
 // every IPA symbol here is multi-byte.
 func (v *Voice) phonemeIDs(ipa string) []int64 {
-	ids := make([]int64, 1, 2*len([]rune(ipa))+1)
-	ids[0] = blank
+	ids := append(make([]int64, 0, 2*len([]rune(ipa))+1), blank)
 	for _, r := range ipa {
-		id, ok := v.ids[r]
-		if !ok {
-			continue
+		if id, ok := v.ids[r]; ok {
+			ids = append(ids, id, blank)
 		}
-		ids = append(ids, id, blank)
 	}
 	return ids
 }
@@ -159,23 +155,20 @@ func trim(samples []float32, lengths []int64) []float32 {
 // a backstop rather than a working part: the loudest of thirty draws across the
 // reference sentences peaked at 0.988.
 func wav(samples []float32, sampleRate int) []byte {
-	silence := sampleRate * tailSilenceMS / 1000
-	pcm := make([]int16, 0, len(samples)+silence)
-	for _, s := range samples {
-		pcm = append(pcm, int16(min(max(s, -1), 1)*32767))
+	pcm := make([]int16, len(samples)+sampleRate*tailSilenceMS/1000) // the tail stays zero
+	for i, s := range samples {
+		pcm[i] = int16(min(max(s, -1), 1) * 32767)
 	}
-	pcm = append(pcm, make([]int16, silence)...)
 
 	dataLen := uint32(len(pcm) * 2)
-	var b bytes.Buffer
-	b.Grow(44 + int(dataLen))
+	out := make([]byte, 0, 44+int(dataLen))
 	for _, field := range []any{
 		[]byte("RIFF"), 36 + dataLen, []byte("WAVE"), []byte("fmt "), uint32(16),
 		uint16(1), uint16(1), uint32(sampleRate), uint32(sampleRate * 2), uint16(2),
 		uint16(16), []byte("data"), dataLen, pcm,
 	} {
-		// A bytes.Buffer never fails to write.
-		_ = binary.Write(&b, binary.LittleEndian, field)
+		// These are all fixed-size types, so the encoding never fails.
+		out, _ = binary.Append(out, binary.LittleEndian, field)
 	}
-	return b.Bytes()
+	return out
 }

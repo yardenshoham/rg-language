@@ -49,7 +49,6 @@ type Result struct {
 	// Hebrew is the vocalized rendering, split so the UI can highlight the רג.
 	Hebrew    []rg.Segment
 	Syllables [][]heb.Syllable
-	// AudioHash addresses the audio, which is synthesized lazily on first request.
 	AudioHash string
 }
 
@@ -84,8 +83,7 @@ func modelWork[V any](p *Pipeline, fn func() (V, error)) (V, error) {
 	case p.modelSlot <- struct{}{}:
 		defer func() { <-p.modelSlot }()
 	case <-time.After(modelTimeout):
-		var zero V
-		return zero, fmt.Errorf("waiting for the model: %w", context.DeadlineExceeded)
+		return *new(V), fmt.Errorf("waiting for the model: %w", context.DeadlineExceeded)
 	}
 	return fn()
 }
@@ -111,8 +109,7 @@ func cachedOnce[V any](ctx context.Context, group *singleflight.Group, cache *lr
 		value, _ := r.Val.(V)
 		return value, r.Err
 	case <-ctx.Done():
-		var zero V
-		return zero, ctx.Err()
+		return *new(V), ctx.Err()
 	}
 }
 
@@ -120,8 +117,6 @@ func cachedOnce[V any](ctx context.Context, group *singleflight.Group, cache *lr
 // default. The cache budgets are bytes, not entries: an entry is as big as what someone
 // typed, so a count bound would let traffic pin unbounded memory; ids are far smaller.
 func New(ctx context.Context, modelsDir string, audioCacheMB int) (*Pipeline, error) {
-	audioBytes := cmp.Or(max(int64(audioCacheMB)<<20, 0), int64(256<<20))
-
 	d, err := diacritizer.New(ctx, filepath.Join(modelsDir, DiacritizerModel))
 	if err != nil {
 		return nil, err
@@ -137,7 +132,7 @@ func New(ctx context.Context, modelsDir string, audioCacheMB int) (*Pipeline, er
 		voice:       v,
 		transforms:  newLRU(64<<20, resultCost),
 		audioIDs:    newLRU(64<<20, func(rgIPA string) int64 { return int64(len(rgIPA)) + 64 }),
-		audio:       newLRU(audioBytes, func(b []byte) int64 { return int64(len(b)) }),
+		audio:       newLRU(cmp.Or(max(int64(audioCacheMB)<<20, 0), int64(256<<20)), func(b []byte) int64 { return int64(len(b)) }),
 		modelSlot:   make(chan struct{}, 1),
 	}, nil
 }

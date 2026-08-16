@@ -23,12 +23,24 @@ func get(t *testing.T, config web.Config, path string, headers ...string) *httpt
 	return rec
 }
 
+// check is get plus what almost every route asserts: the status, and what the body contains.
+func check(t *testing.T, config web.Config, path string, status int, want ...string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := get(t, config, path)
+	if rec.Code != status {
+		t.Errorf("GET %s: status = %d, want %d", path, rec.Code, status)
+	}
+	for _, w := range want {
+		if !strings.Contains(rec.Body.String(), w) {
+			t.Errorf("GET %s is missing %q", path, w)
+		}
+	}
+	return rec
+}
+
 func TestHealth(t *testing.T) {
 	t.Parallel()
-	rec := get(t, web.Config{}, "/health")
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", rec.Code)
-	}
+	rec := check(t, web.Config{}, "/health", http.StatusOK)
 	if got := rec.Body.String(); got != "ok" {
 		t.Errorf("body = %q, want %q", got, "ok")
 	}
@@ -37,21 +49,15 @@ func TestHealth(t *testing.T) {
 // Hebrew is mojibake unless the charset is in both header and document.
 func TestHomeIsUTF8Hebrew(t *testing.T) {
 	t.Parallel()
-	rec := get(t, web.Config{}, "/")
-	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
-		t.Errorf("Content-Type = %q", got)
-	}
-	page := rec.Body.String()
-	for _, want := range []string{
+	rec := check(t, web.Config{}, "/", http.StatusOK,
 		`<meta charset="utf-8">`,
 		`lang="he"`,
 		`dir="rtl"`,
 		"שפת הריש גימל",
 		`<textarea`,
-	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("home page is missing %q", want)
-		}
+	)
+	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Errorf("Content-Type = %q", got)
 	}
 }
 
@@ -60,10 +66,7 @@ func TestHomeIsUTF8Hebrew(t *testing.T) {
 func TestEmptyTransformClearsTheResult(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"/transform?text=", "/transform", "/transform?text=%20%20"} {
-		rec := get(t, web.Config{}, path)
-		if rec.Code != http.StatusOK {
-			t.Errorf("GET %s: status = %d, want 200", path, rec.Code)
-		}
+		rec := check(t, web.Config{}, path, http.StatusOK)
 		if got := rec.Body.String(); got != "" {
 			t.Errorf("GET %s: body = %q, want empty", path, got)
 		}
@@ -86,26 +89,14 @@ func TestHtmxKeepsTheURLShareable(t *testing.T) {
 // a CDN is one more thing to break.
 func TestRoutes(t *testing.T) {
 	t.Parallel()
-	for _, tt := range []struct {
-		path, contains string
-		status         int
-	}{
-		{"/about", "הכלל", http.StatusOK},            // the about page explains the rule
-		{"/audio/deadbeef", "", http.StatusNotFound}, // the .wav suffix is required
-		{"/static/app.css", "", http.StatusOK},
-		{"/static/htmx.min.js", "", http.StatusOK},
-		{"/static/favicon.svg", "", http.StatusOK},
-		{"/static/fonts/noto-sans-hebrew-400.woff2", "", http.StatusOK},
-		{"/static/fonts/noto-sans-hebrew-600.woff2", "", http.StatusOK},
+	for _, path := range []string{
+		"/static/app.css", "/static/htmx.min.js", "/static/favicon.svg",
+		"/static/fonts/noto-sans-hebrew-400.woff2", "/static/fonts/noto-sans-hebrew-600.woff2",
 	} {
-		rec := get(t, web.Config{}, tt.path)
-		if rec.Code != tt.status {
-			t.Errorf("GET %s: status = %d, want %d", tt.path, rec.Code, tt.status)
-		}
-		if !strings.Contains(rec.Body.String(), tt.contains) {
-			t.Errorf("GET %s is missing %q", tt.path, tt.contains)
-		}
+		check(t, web.Config{}, path, http.StatusOK)
 	}
+	check(t, web.Config{}, "/about", http.StatusOK, "הכלל")        // the about page explains the rule
+	check(t, web.Config{}, "/audio/deadbeef", http.StatusNotFound) // the .wav suffix is required
 }
 
 // Analytics are opt-in, and each server answers with its own configuration.
@@ -117,16 +108,13 @@ func TestPostHogIsOptIn(t *testing.T) {
 		}
 	}
 
-	page := get(t, web.Config{
+	check(t, web.Config{
 		PostHogKey:    "phc_test",
 		PostHogHost:   "https://m.example.com",
 		PostHogUIHost: "https://eu.posthog.com",
-	}, "/").Body.String()
-	want := `posthog.init("phc_test",{api_host:"https://m.example.com",ui_host:"https://eu.posthog.com",` +
-		`defaults:'2026-05-30',person_profiles:'identified_only'})`
-	if !strings.Contains(page, want) {
-		t.Errorf("home page is missing %q", want)
-	}
+	}, "/", http.StatusOK,
+		`posthog.init("phc_test",{api_host:"https://m.example.com",ui_host:"https://eu.posthog.com",`+
+			`defaults:'2026-05-30',person_profiles:'identified_only'})`)
 
 	// The fragment htmx swaps in is body content: a second copy of the loader
 	// there would re-init PostHog on every keystroke.
@@ -136,8 +124,6 @@ func TestPostHogIsOptIn(t *testing.T) {
 
 	// Without an explicit host the snippet still needs one, or it has nowhere to
 	// send events and no assets host to derive.
-	page = get(t, web.Config{PostHogKey: "phc_test"}, "/about").Body.String()
-	if !strings.Contains(page, `posthog.init("phc_test",{api_host:"https://eu.i.posthog.com",defaults:`) {
-		t.Error("about page does not fall back to the EU cloud host")
-	}
+	check(t, web.Config{PostHogKey: "phc_test"}, "/about", http.StatusOK,
+		`posthog.init("phc_test",{api_host:"https://eu.i.posthog.com",defaults:`)
 }

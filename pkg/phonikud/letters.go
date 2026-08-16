@@ -19,8 +19,7 @@ var (
 		"\u05be", "-", // maqaf
 	)
 
-	// Letters and their marks. The en geresh and prefix bar ride along with the
-	// letter they follow.
+	// Letters and their marks; the geresh and prefix bar ride with the letter they follow.
 	lettersRe = regexp.MustCompile(`(\p{L})([\p{M}'|]*)`)
 
 	hePattern = regexp.MustCompile(hePatternText) //nolint:gocritic // the sheva-to-tav range spans marks and letters on purpose
@@ -28,14 +27,12 @@ var (
 
 // normalize decomposes, sorts each letter's marks and folds punctuation to ASCII.
 func normalize(text string) string {
-	text = norm.NFD.String(text)
-	text = sortDiacriticsRe.ReplaceAllStringFunc(text, func(match string) string {
+	sorted := sortDiacriticsRe.ReplaceAllStringFunc(norm.NFD.String(text), func(match string) string {
 		runes := []rune(match)
-		marks := runes[1:]
-		slices.Sort(marks)
-		return string(runes[0]) + string(marks)
+		slices.Sort(runes[1:])
+		return string(runes)
 	})
-	return deduplicate.Replace(text)
+	return deduplicate.Replace(sorted)
 }
 
 // letter is one letter with its stacked marks. allDiac keeps every mark; diac
@@ -46,15 +43,13 @@ type letter struct {
 	diac    string
 }
 
+// plainDiacs drops phonikud's three extra marks, leaving the vowel.
+var plainDiacs = strings.NewReplacer(
+	string(hatamaDiacritic), "", string(prefixDiacritic), "", string(vocalShvaDiacritic), "")
+
 func newLetter(char, diac string) letter {
 	all := normalize(diac)
-	var plain strings.Builder
-	for _, r := range all {
-		if !isEnhancedDiacritic(r) {
-			plain.WriteRune(r)
-		}
-	}
-	return letter{char: normalize(char), allDiac: all, diac: plain.String()}
+	return letter{char: normalize(char), allDiac: all, diac: plainDiacs.Replace(all)}
 }
 
 func (l letter) String() string { return l.char + l.allDiac }
@@ -68,62 +63,43 @@ func getLetters(word string) []letter {
 	return letters
 }
 
-// isVowelDiac reports whether a mark counts as a vowel for syllable splitting: a
-// plain shva does not, but meteg (a vocal shva) does.
-func isVowelDiac(r rune) bool {
-	return (r >= hatafSegol && r <= kubuts) || r == kamatzKatan || r == vocalShvaDiacritic
-}
-
+// hasVowelDiacs reports a mark that counts as a vowel: a plain shva does not, a meteg does.
 func hasVowelDiacs(s string) bool {
-	if s == "ו\u05bc" { // shuruk: the vav itself is the vowel
-		return true
-	}
-	return strings.ContainsFunc(s, isVowelDiac)
+	// Shuruk: the vav is itself the vowel.
+	return s == "ו\u05bc" || strings.ContainsFunc(s, func(r rune) bool {
+		return (r >= hatafSegol && r <= kubuts) || r == kamatzKatan || r == vocalShvaDiacritic
+	})
 }
 
-// getSyllables splits a word into syllables, accurately enough only to find the
-// last one — all the stress prediction below needs.
+// getSyllables splits a word into syllables, accurately only for the last one.
 func getSyllables(word string) []string {
 	letters := getLetters(word)
+	isVav := func(i int) bool { return i < len(letters) && letters[i].char == "ו" }
+
 	var syllables []string
 	var cur string
 	vowelState := false
-
 	for i := 0; i < len(letters); {
-		l := letters[i]
-		hasVowel := hasVowelDiacs(l.String()) ||
-			(i == 0 && strings.ContainsRune(l.allDiac, shva))
-
-		// Look ahead for a vav, which always starts its own syllable.
-		vav1 := i+2 < len(letters) && letters[i+2].char == "ו"
-		vav2 := i+3 < len(letters) && letters[i+3].char == "ו"
-
+		l := letters[i].String()
+		hasVowel := hasVowelDiacs(l) || (i == 0 && strings.ContainsRune(l, shva))
 		if hasVowel && vowelState {
 			syllables = append(syllables, cur)
-			cur = l.String()
-		} else {
-			cur += l.String()
+			cur = ""
 		}
-		if hasVowel {
-			vowelState = true
-		}
+		cur += l
+		vowelState = vowelState || hasVowel
 		i++
 
+		// A vav always starts its own syllable, so look ahead for one or two.
 		switch {
-		case vav1 && vav2:
-			// Two vavs coming: close the current syllable and join both as the next.
-			if cur != "" {
-				syllables = append(syllables, cur+letters[i].String())
-			}
+		case isVav(i+1) && isVav(i+2):
+			syllables = append(syllables, cur+letters[i].String())
 			cur = letters[i+1].String() + letters[i+2].String()
 			i += 3
 			vowelState = true
-		case vav1 && letters[i+1].diac != "":
-			// One vav coming: close the syllable now.
-			if cur != "" {
-				syllables = append(syllables, cur)
-				cur = ""
-			}
+		case isVav(i+1) && letters[i+1].diac != "":
+			syllables = append(syllables, cur)
+			cur = ""
 			vowelState = false
 		}
 	}
@@ -140,29 +116,22 @@ func addMilraHatama(word string) string {
 		return word
 	}
 	last := len(syllables) - 1
-	letters := getLetters(syllables[last])
-	if len(letters) == 0 {
+	first := lettersRe.FindStringIndex(syllables[last]) // the syllable's first letter and marks
+	if first == nil {
 		return word
 	}
-	letters[0].allDiac += string(hatamaDiacritic)
-
-	var b strings.Builder
-	for _, l := range letters {
-		b.WriteString(l.String())
-	}
-	syllables[last] = b.String()
+	syllables[last] = syllables[last][:first[1]] + string(hatamaDiacritic) + syllables[last][first[1]:]
 	return strings.Join(syllables, "")
 }
 
 // sortHatama moves stress off a letter carrying masora, which is not pronounced.
 func sortHatama(letters []letter) []letter {
 	for i := range len(letters) - 1 {
-		diacs := []rune(letters[i].allDiac)
-		at := slices.Index(diacs, hatamaDiacritic)
-		if at < 0 || !slices.Contains(diacs, nikudHaserDiacritic) {
+		d := letters[i].allDiac
+		if !strings.ContainsRune(d, hatamaDiacritic) || !strings.ContainsRune(d, nikudHaserDiacritic) {
 			continue
 		}
-		letters[i].allDiac = string(slices.Delete(diacs, at, at+1))
+		letters[i].allDiac = strings.Replace(d, string(hatamaDiacritic), "", 1)
 		letters[i+1].allDiac += string(hatamaDiacritic)
 	}
 	return letters

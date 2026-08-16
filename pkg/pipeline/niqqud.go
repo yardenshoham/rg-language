@@ -1,10 +1,9 @@
 package pipeline
 
 import (
+	"cmp"
 	"slices"
 	"strings"
-
-	"github.com/yardenshoham/rg-language/pkg/rg"
 )
 
 const (
@@ -47,11 +46,8 @@ func NormalizeNiqqud(vocalized string) string {
 		if runes[head] == 'ו' && prev >= 0 && runes[prev] != 'ו' && isHebrewLetter(runes[prev]) &&
 			slices.ContainsFunc(runes[head+1:i+1], carriesVowel) {
 			marks := runes[prev+1 : head]
-			for _, redundant := range []rune{qubuts, holam} {
-				if at := slices.Index(marks, redundant); at >= 0 {
-					marks[at] = -1 // dropped on the way out
-					break
-				}
+			if at := cmp.Or(slices.Index(marks, qubuts)+1, slices.Index(marks, holam)+1); at > 0 {
+				marks[at-1] = -1 // dropped on the way out
 			}
 		}
 		prev = head
@@ -59,13 +55,10 @@ func NormalizeNiqqud(vocalized string) string {
 	return string(slices.DeleteFunc(runes, func(r rune) bool { return r < 0 }))
 }
 
-// ApplyLexicon replaces each word whose bare spelling is pinned in the lexicon.
 func ApplyLexicon(vocalized string) string {
 	words := strings.Split(vocalized, " ")
 	for i, word := range words {
-		if pinned, ok := lexicon[string(slices.DeleteFunc([]rune(word), isMark))]; ok {
-			words[i] = pinned
-		}
+		words[i] = cmp.Or(lexicon[string(slices.DeleteFunc([]rune(word), isMark))], word)
 	}
 	return strings.Join(words, " ")
 }
@@ -73,12 +66,6 @@ func ApplyLexicon(vocalized string) string {
 // DoubledVowel detects the bug NormalizeNiqqud repairs: two identical adjacent vowels,
 // which real Hebrew essentially never produces — though the corpus pins three that do.
 func DoubledVowel(ipa string) bool {
-	var prev rune
-	for _, r := range ipa {
-		if r == prev && rg.IsVowel(r) {
-			return true
-		}
-		prev = r
-	}
-	return false
+	return slices.ContainsFunc([]string{"aa", "ee", "ii", "oo", "uu"},
+		func(pair string) bool { return strings.Contains(ipa, pair) })
 }

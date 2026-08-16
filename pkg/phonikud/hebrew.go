@@ -5,106 +5,100 @@ import (
 	"strings"
 )
 
-// The transducer, ported from phonikud's hebrew.py: a three-letter window —
-// previous, current, next — and a flat chain of rules. Rules that look arbitrary
-// each encode an edge case a native speaker validated; do not tidy them.
+// The transducer, ported from phonikud's hebrew.py: a three-letter window and a flat
+// chain of rules, each encoding an edge case a native speaker validated.
 //
 //   - https://en.wikipedia.org/wiki/Help:IPA/Hebrew
 //   - https://hebrew-academy.org.il/2020/08/11/איך-הוגים-את-השווא-הנע
 //   - https://hebrew-academy.org.il/2022/03/03/מלעיל-ומלרע-על-ההטעמה-בעברית
 
 func phonemizeHebrew(letters []letter) []string {
+	at := func(i int) *letter {
+		if i < 0 || i >= len(letters) {
+			return nil
+		}
+		return &letters[i]
+	}
 	var phonemes []string
 	for i := 0; i < len(letters); {
-		var prev, next *letter
-		if i > 0 {
-			prev = &letters[i-1]
-		}
-		if i+1 < len(letters) {
-			next = &letters[i+1]
-		}
-		next2, skipOffset := letterToPhonemes(letters[i], prev, next)
-		phonemes = append(phonemes, next2...)
+		out, skipOffset := letterToPhonemes(letters[i], at(i-1), at(i+1))
+		phonemes = append(phonemes, out...)
 		i += skipOffset + 1
 	}
 	return phonemes
 }
 
-// handleYud reports whether a yod is a mater rather than a consonant, and so
-// contributes no sound.
+// handleYud reports a yod that is a mater, and so contributes no sound: bare, mid-word,
+// not after an alef with tsere, and not before a vav with a meaning of its own.
 func handleYud(cur letter, prev, next *letter) bool {
-	return next != nil &&
-		cur.diac == "" && // yod without diacritics
-		prev != nil && // in the middle of the word
-		prev.char+prev.diac != "א\u05b5" && // previous is not אֵ (alef with tsere)
-		// and the next vav does not have a meaning of its own
+	return next != nil && prev != nil && cur.diac == "" && prev.char+prev.diac != "א\u05b5" &&
 		(next.char != "ו" || next.diac == "" || strings.ContainsRune(next.diac, shva))
 }
 
-// handleVav resolves the vav: a consonant, either of two vowels, or silent,
-// depending entirely on its marks and neighbours.
-func handleVav(cur letter, prev, next *letter) (phonemes []string, skipConsonants, skipDiacritics bool, skipOffset int) {
+// handleVav resolves the vav: a consonant, either of two vowels, or silent.
+func handleVav(cur letter, prev, next *letter) (phoneme string, skip bool, skipOffset int) {
 	if prev != nil && strings.ContainsRune(prev.diac, shva) && strings.ContainsRune(cur.diac, holam) {
-		return []string{"vo"}, true, true, 0
+		return "vo", true, 0
 	}
 
 	if next != nil && next.char == "ו" {
-		diac := cur.diac + next.diac
 		switch {
-		case strings.ContainsRune(diac, holam):
-			return []string{"vo"}, true, true, 1
+		case strings.ContainsRune(cur.diac+next.diac, holam):
+			return "vo", true, 1
 		case cur.diac == next.diac:
-			return []string{"vu"}, true, true, 1
+			return "vu", true, 1
 		case strings.ContainsRune(cur.diac, hirik):
-			return []string{"vi"}, true, true, 0
+			return "vi", true, 0
 		case strings.ContainsRune(cur.diac, shva) && next.diac == "":
-			return []string{"v"}, true, true, 0
+			return "v", true, 0
 		case strings.ContainsRune(cur.diac, kamatz) || strings.ContainsRune(cur.diac, patah):
-			return []string{"va"}, true, true, 0
+			return "va", true, 0
 		case strings.ContainsRune(cur.diac, tsere) || strings.ContainsRune(cur.diac, segol):
-			return []string{"ve"}, true, true, 0
+			return "ve", true, 0
 		}
-		return nil, false, false, 0
+		return "", false, 0
 	}
 
 	// A single vav.
 	switch {
 	case strings.ContainsRune(cur.diac, patah) || strings.ContainsRune(cur.diac, kamatz):
-		return []string{"va"}, true, true, 0
+		return "va", true, 0
 	case strings.ContainsRune(cur.diac, tsere) || strings.ContainsRune(cur.diac, segol):
-		return []string{"ve"}, true, true, 0
+		return "ve", true, 0
 	case strings.ContainsRune(cur.diac, holam):
-		return []string{"o"}, true, true, 0
+		return "o", true, 0
 	case strings.ContainsRune(cur.diac, kubuts) || strings.ContainsRune(cur.diac, dagesh):
-		return []string{"u"}, true, true, 0
+		return "u", true, 0
 	case strings.ContainsRune(cur.diac, shva) && prev == nil:
-		return []string{"ve"}, true, true, 0
+		return "ve", true, 0
 	case strings.ContainsRune(cur.diac, hirik):
-		return []string{"vi"}, true, true, 0
+		return "vi", true, 0
 	case next != nil && cur.diac == "":
-		return nil, true, true, 0
+		return "", true, 0
 	}
-	return []string{"v"}, true, true, 0
+	return "v", true, 0
 }
+
+// gnuvaPhonemes are the sounds a word-final patah takes under het, he and ayin.
+var gnuvaPhonemes = map[string]string{"ח": "ax", "ה": "ah", "ע": "a"}
 
 func letterToPhonemes(cur letter, prev, next *letter) ([]string, int) {
 	var out []string
-	skipConsonants, skipDiacritics := false, false
-	skipOffset := 0
+	skipConsonants, skipDiacritics, skipOffset := false, false, 0
 
 	switch {
 	case strings.ContainsRune(cur.allDiac, nikudHaserDiacritic):
 		skipConsonants, skipDiacritics = true, true
 
 	case cur.char == "א" && cur.diac == "" && prev != nil:
-		if next != nil && next.char != "ו" {
-			skipConsonants = true
-		}
+		skipConsonants = next != nil && next.char != "ו"
 
 	case cur.char == "י" && handleYud(cur, prev, next):
 		skipConsonants = true
 
-	case cur.char == "ש" && strings.ContainsRune(cur.diac, sin):
+	// A sin by its own dot, or a shin without nikud after one, which is itself a sin.
+	case cur.char == "ש" && (strings.ContainsRune(cur.diac, sin) ||
+		(cur.diac == "" && prev != nil && strings.ContainsRune(prev.diac, sin))):
 		if next != nil && next.char == "ש" && next.diac == "" &&
 			(strings.ContainsRune(cur.diac, patah) || strings.ContainsRune(cur.diac, kamatz)) {
 			out = append(out, "sa") // יששכר
@@ -115,43 +109,27 @@ func letterToPhonemes(cur letter, prev, next *letter) ([]string, int) {
 		out = append(out, "s")
 		skipConsonants = true
 
-	// Shin without nikud after a sin is itself a sin.
-	case cur.char == "ש" && cur.diac == "" && prev != nil && strings.ContainsRune(prev.diac, sin):
-		out = append(out, "s")
-		skipConsonants = true
-
-	case next == nil && cur.char == "ח" && strings.ContainsRune(cur.diac, patah):
-		out = append(out, "ax") // final het gnuva
-		skipConsonants, skipDiacritics = true, true
-
-	case next == nil && cur.char == "ה" && strings.ContainsRune(cur.diac, patah):
-		out = append(out, "ah") // final he gnuva
-		skipConsonants, skipDiacritics = true, true
-
-	case next == nil && cur.char == "ע" && strings.ContainsRune(cur.diac, patah):
-		out = append(out, "a") // final ayin gnuva
+	// A final patah is gnuva under these three letters.
+	case next == nil && strings.ContainsRune(cur.diac, patah) && gnuvaPhonemes[cur.char] != "":
+		out = append(out, gnuvaPhonemes[cur.char])
 		skipConsonants, skipDiacritics = true, true
 	}
 
-	geresh, hasGeresh := gereshPhonemes[cur.char]
-	withDagesh, hasDagesh := lettersPhonemes[cur.char+string(dagesh)]
+	geresh, withDagesh := gereshPhonemes[cur.char], lettersPhonemes[cur.char+string(dagesh)]
 	switch {
-	case strings.ContainsRune(cur.diac, '\'') && hasGeresh:
+	case strings.ContainsRune(cur.diac, '\'') && geresh != "":
 		out = append(out, geresh)
 		skipConsonants = true
-		if cur.char == "ת" {
-			skipDiacritics = true
-		}
+		skipDiacritics = skipDiacritics || cur.char == "ת"
 
-	case strings.ContainsRune(cur.diac, dagesh) && hasDagesh:
+	case strings.ContainsRune(cur.diac, dagesh) && withDagesh != "":
 		out = append(out, withDagesh)
 		skipConsonants = true
 
 	case cur.char == "ו" && !strings.ContainsRune(cur.allDiac, nikudHaserDiacritic):
-		vavPhonemes, vavSkipConsonants, vavSkipDiacritics, vavSkipOffset := handleVav(cur, prev, next)
-		out = append(out, vavPhonemes...)
-		skipConsonants, skipDiacritics = vavSkipConsonants, vavSkipDiacritics
-		skipOffset += vavSkipOffset
+		vav, skip, off := handleVav(cur, prev, next)
+		out = append(out, vav)
+		skipConsonants, skipDiacritics, skipOffset = skip, skip, off
 	}
 
 	if !skipConsonants {
@@ -177,20 +155,14 @@ func letterToPhonemes(cur letter, prev, next *letter) ([]string, int) {
 	return keepPhonemes(sortStress(out)), skipOffset
 }
 
-// sortStress moves the stress just before the vowel, where TTS expects it;
-// linguistics would put it at the syllable start.
+// sortStress moves the stress just before the vowel, where TTS expects it.
 func sortStress(phonemes []string) []string {
 	joined := strings.Join(phonemes, "")
 	if !strings.Contains(joined, stressPhoneme) || !strings.ContainsAny(joined, "aeiou") {
 		return phonemes
 	}
 
-	kept := make([]string, 0, len(phonemes))
-	for _, p := range phonemes {
-		if p != stressPhoneme {
-			kept = append(kept, p)
-		}
-	}
+	kept := slices.DeleteFunc(phonemes, func(p string) bool { return p == stressPhoneme })
 	for i, p := range kept {
 		if at := strings.IndexAny(p, "aeiou"); at >= 0 {
 			kept[i] = p[:at] + stressPhoneme + p[at:]

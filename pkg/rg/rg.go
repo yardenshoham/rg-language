@@ -25,7 +25,6 @@ const (
 	StressBoth   StressMode = "both"
 )
 
-// Segment is a run of transformed text; Inserted marks the added רג for highlighting.
 type Segment struct {
 	Text     string
 	Inserted bool

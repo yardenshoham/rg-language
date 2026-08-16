@@ -1,7 +1,5 @@
-// Package heb renders RG for humans: Hebrew with niqqud, the same stripped, and
-// hyphenated Latin syllables. It works from the vocalized Hebrew, not the IPA: the
-// niqqud already marks every vowel, so no IPA-to-Hebrew generator (matres lectionis,
-// final forms, silent א/ה/ע) is needed.
+// Package heb renders RG for humans: vocalized Hebrew, the same stripped, and hyphenated
+// Latin. It works from the niqqud, not the IPA, so it needs no IPA-to-Hebrew generator.
 package heb
 
 import (
@@ -21,15 +19,13 @@ const (
 	yod, vav                                  = "\u05d9", "\u05d5"
 )
 
-// vowels maps a vowel mark to its sound and to the spelling the copy in the inserted
-// רג syllable uses. Written RG is not standardized — this is the project's convention.
-var vowels = map[string]struct{ sound, copied string }{
-	hiriq: {"i", hiriq}, tsere: {"e", tsere}, segol: {"e", segol},
-	patah: {"a", patah}, qamats: {"a", qamats},
-	holam: {"o", vav + holam}, holamHaser: {"o", vav + holam},
-	qamatsQatan: {"o", vav + holam}, qubuts: {"u", vav + dagesh},
-	hatafSegol: {"e", segol}, hatafPatah: {"a", patah},
-	hatafQamats: {"o", vav + holam},
+// vowels maps a vowel mark to the spelling the copy in the inserted רג syllable uses.
+// Written RG is not standardized — this is the project's convention.
+var vowels = map[string]string{
+	hiriq: hiriq, tsere: tsere, segol: segol, hatafSegol: segol,
+	patah: patah, qamats: qamats, hatafPatah: patah,
+	holam: vav + holam, holamHaser: vav + holam, qamatsQatan: vav + holam, hatafQamats: vav + holam,
+	qubuts: vav + dagesh,
 }
 
 // isMark reports a Hebrew point, accent or cantillation mark; letters start at U+05D0.
@@ -40,22 +36,16 @@ func StripMarks(text string) string {
 	return string(slices.DeleteFunc([]rune(text), isMark))
 }
 
-type unit struct{ letter, marks string }
-
-func (u unit) vowel() string {
-	for _, m := range u.marks {
-		if _, ok := vowels[string(m)]; ok {
-			return string(m)
-		}
-	}
-	return ""
-}
+type unit struct{ letter, marks, copied string }
 
 func units(text string) []unit {
 	var us []unit
 	for _, r := range text {
-		if isMark(r) && len(us) > 0 {
-			us[len(us)-1].marks += string(r)
+		if n := len(us) - 1; isMark(r) && n >= 0 {
+			us[n].marks += string(r)
+			if c, ok := vowels[string(r)]; ok && us[n].copied == "" {
+				us[n].copied = c
+			}
 			continue
 		}
 		us = append(us, unit{letter: string(r)})
@@ -77,51 +67,43 @@ func RGSegments(vocalized string) []rg.Segment {
 	us := units(text)
 
 	var segs []rg.Segment
-	add := func(text string, inserted bool) {
-		if n := len(segs); n == 0 || segs[n-1].Inserted != inserted {
-			segs = append(segs, rg.Segment{Inserted: inserted})
-		}
-		segs[len(segs)-1].Text += text
-	}
-
+	orig := ""
 	for i := 0; i < len(us); i++ {
 		cur := us[i]
-		vowel := cur.vowel()
-
-		var sound, copied, mater string
+		copied, mater := cur.copied, ""
 		switch {
 		case cur.letter == vav && strings.ContainsAny(cur.marks, holam+holamHaser):
-			sound, copied = "o", vav+holam // holam male: the vav carries it
-		case cur.letter == vav && strings.Contains(cur.marks, dagesh) && vowel == "" &&
-			i > 0 && us[i-1].vowel() == "":
-			sound, copied = "u", vav+dagesh // shuruk
-		case vowel != "":
-			sound, copied = vowels[vowel].sound, vowels[vowel].copied
-			// A bare yod after i/e is a mater — unless another yod follows, which
-			// makes that one consonantal (היי).
-			if (sound == "i" || sound == "e") && i+1 < len(us) && us[i+1].letter == yod &&
-				us[i+1].marks == "" && (i+2 >= len(us) || us[i+2].letter != yod) {
-				mater, i = yod, i+1 // the mater is consumed with this unit
-			}
-		case strings.Contains(cur.marks, shva) && strings.Contains(cur.marks, meteg):
-			sound, copied = "e", segol // vocal shva
+			copied = vav + holam // holam male: the vav carries it
+		case cur.letter == vav && strings.Contains(cur.marks, dagesh) && copied == "" &&
+			i > 0 && us[i-1].copied == "":
+			copied = vav + dagesh // shuruk
+		// A bare yod after i/e is a mater — unless another yod follows, which
+		// makes that one consonantal (היי).
+		case (copied == hiriq || copied == tsere || copied == segol) && i+1 < len(us) &&
+			us[i+1].letter == yod && us[i+1].marks == "" && (i+2 >= len(us) || us[i+2].letter != yod):
+			mater, i = yod, i+1 // the mater is consumed with this unit
+		case copied == "" && strings.Contains(cur.marks, shva) && strings.Contains(cur.marks, meteg):
+			copied = segol // vocal shva
 		}
 
-		add(cur.letter+strings.ReplaceAll(cur.marks, meteg, "")+mater, false)
-		if sound != "" {
+		orig += cur.letter + strings.ReplaceAll(cur.marks, meteg, "") + mater
+		if copied != "" {
 			// The copy keeps the mater yod, which makes the i unambiguous (פירגיצרגה).
-			if sound == "i" && mater != "" {
+			if copied == hiriq && mater != "" {
 				copied += yod
 			}
-			add("ר"+shva+"ג"+copied, true)
+			segs = append(segs, rg.Segment{Text: orig}, rg.Segment{Text: "ר" + shva + "ג" + copied, Inserted: true})
+			orig = ""
 		}
+	}
+	if orig != "" {
+		segs = append(segs, rg.Segment{Text: orig})
 	}
 	return segs
 }
 
 var latin = strings.NewReplacer("ʃ", "sh", "χ", "kh", "ʁ", "r", "ɡ", "g", "ʔ", "", "ʒ", "zh", "j", "y")
 
-// Syllable is one Latin syllable of the readable fallback rendering.
 type Syllable struct {
 	Text               string
 	Stressed, Inserted bool

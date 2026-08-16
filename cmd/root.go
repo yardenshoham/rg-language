@@ -39,10 +39,7 @@ func newVersionCmd() *cobra.Command {
 			if !ok {
 				return errors.New("failed to read build info")
 			}
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
-				Version   string
-				GoVersion string
-			}{Version: info.Main.Version, GoVersion: info.GoVersion})
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(struct{ Version, GoVersion string }{info.Main.Version, info.GoVersion})
 		},
 	}
 }

@@ -33,7 +33,6 @@ var nikudClasses = []string{
 	"\u05c7", "\u05bc\u05c7",
 }
 
-// shinClasses picks which of the two dots a shin gets.
 var shinClasses = []string{"\u05c1", "\u05c2"}
 
 const (
@@ -44,15 +43,11 @@ const (
 	vocalShvaChar = "\u05bd" // meteg
 	prefixChar    = "|"
 
-	alef = 'א'
-	tav  = 'ת'
-
 	// maxChunkRunes is the model's context window less the two special tokens.
 	maxChunkRunes = 2046
 )
 
-// nikudPattern matches what the model must not see: it adds these marks, so any
-// already present are stripped first.
+// nikudPattern matches what the model must not see: it adds these marks itself.
 var nikudPattern = regexp.MustCompile(`[\x{0590}-\x{05c7}|]`)
 
 // Diacritizer is a loaded model. It is safe for concurrent use.
@@ -85,7 +80,6 @@ func New(ctx context.Context, modelPath string) (*Diacritizer, error) {
 
 func (d *Diacritizer) Close() error { return d.session.Destroy() }
 
-// AddDiacritics returns the text with niqqud, stress and vocal-shva marks.
 func (d *Diacritizer) AddDiacritics(text string) (string, error) {
 	var b strings.Builder
 	for _, chunk := range chunks(text) {
@@ -96,28 +90,22 @@ func (d *Diacritizer) AddDiacritics(text string) (string, error) {
 	return b.String(), nil
 }
 
-// chunks stays under the model's context window, preferring a break after a stop
-// or a newline.
+// chunks stays under the context window, breaking after a full stop or a newline.
 func chunks(text string) []string {
 	runes := []rune(text)
 	if len(runes) <= maxChunkRunes {
 		return []string{text}
 	}
 
-	// For 1 <= i <= len(runes): the end, or either side of a full stop or newline.
-	breakable := func(i int) bool {
-		return i == len(runes) || strings.ContainsRune(".\n", runes[i]) || strings.ContainsRune(".\n", runes[i-1])
-	}
-
 	var out []string
 	for start := 0; start < len(runes); {
-		full := min(start+maxChunkRunes, len(runes))
-		end := full
-		for end > start && !breakable(end) {
-			end--
-		}
-		if end == start {
-			end = full // a sentence longer than the window: cut it at the window
+		end := min(start+maxChunkRunes, len(runes)) // a sentence past the window is cut at it
+		// Back up to the end of the text, or to either side of a full stop or newline.
+		for cut := end; cut > start; cut-- {
+			if cut == len(runes) || strings.ContainsRune(".\n", runes[cut]) || strings.ContainsRune(".\n", runes[cut-1]) {
+				end = cut
+				break
+			}
 		}
 		out = append(out, string(runes[start:end]))
 		start = end
@@ -131,36 +119,31 @@ type token struct {
 	start, end int
 }
 
-// isAllowed reports whether the model's normalizer keeps a character. Anything
-// else folds into one unknown token, keeping positions aligned with training.
-func isAllowed(r rune) bool {
-	return r <= 0x007f || (r >= 0x0590 && r <= 0x05ff) ||
-		(r >= 0x200c && r <= 0x203f) || (r >= 0x20a0 && r <= 0x20bf) ||
-		(r >= 0x2150 && r <= 0x218b) || (r >= 0x2200 && r <= 0x22ff) ||
-		(r >= 0xfb00 && r <= 0xfb4f)
-}
+// allowed is what the model's normalizer keeps. Anything else folds into one unknown
+// token, keeping positions aligned with training.
+var allowed = &unicode.RangeTable{R16: []unicode.Range16{
+	{0x0000, 0x007f, 1}, {0x0590, 0x05ff, 1}, {0x200c, 0x203f, 1}, {0x20a0, 0x20bf, 1},
+	{0x2150, 0x218b, 1}, {0x2200, 0x22ff, 1}, {0xfb00, 0xfb4f, 1},
+}}
 
 // fold applies the model's normalizer to one character. The order matters: marks are
 // dropped WITHOUT decomposing first, so a precomposed ŭ keeps its breve and falls
 // outside the alphabet. Reversing that changes the token ids, and so the predictions.
 func fold(r rune) (string, bool) {
-	var b strings.Builder
-	for _, c := range strings.ToLower(norm.NFKC.String(string(r))) {
-		if !unicode.Is(unicode.Mn, c) {
-			b.WriteRune(c)
+	folded := strings.Map(func(c rune) rune {
+		if unicode.Is(unicode.Mn, c) {
+			return -1
 		}
-	}
-	folded := b.String()
+		return c
+	}, strings.ToLower(norm.NFKC.String(string(r))))
 	runes := []rune(folded)
-	return folded, len(runes) == 1 && isAllowed(runes[0])
+	return folded, len(runes) == 1 && unicode.Is(allowed, runes[0])
 }
 
-// tokenize turns the sentence into one token per character, except that a deleted
-// character gets no token and an unrepresentable run becomes one unknown token.
-//
-// Accepted divergence from upstream: fold works per character, so ligatures split and a
-// run containing a mark becomes two unknown tokens. The round-trip test proves no text is
-// lost; only niqqud around characters this site is not for can differ.
+// tokenize gives each character one token, except that a deleted character gets none and
+// an unrepresentable run becomes one unknown token. Accepted divergence from upstream:
+// fold works per character, so ligatures split and a run with a mark becomes two unknown
+// tokens; the round-trip test proves no text is lost, only niqqud around non-Hebrew text.
 func (d *Diacritizer) tokenize(runes []rune) []token {
 	tokens := make([]token, 0, len(runes)+2)
 	tokens = append(tokens, token{id: d.cls})
@@ -178,11 +161,10 @@ func (d *Diacritizer) tokenize(runes []rune) []token {
 			i++
 		default:
 			run := i + 1
-			for run < len(runes) {
+			for ; run < len(runes); run++ {
 				if f, ok := fold(runes[run]); f == "" || ok {
 					break
 				}
-				run++
 			}
 			tokens = append(tokens, token{id: d.unk, start: i, end: run})
 			i = run
@@ -219,24 +201,30 @@ func (d *Diacritizer) predict(b *strings.Builder, sentence string) error {
 	}
 	defer onnx.Destroy(outputs...)
 
-	rows, err := logits(outputs)
-	if err != nil {
-		return err
+	// Unwrap each [1, tokens, classes] output into a per-token row lookup.
+	rows := make([]func(token int) []float32, len(outputs))
+	for i, value := range outputs {
+		tensor, ok := value.(*ort.Tensor[float32])
+		if !ok {
+			return fmt.Errorf("diacritizer output %d is %T, want a float32 tensor", i, value)
+		}
+		shape := tensor.GetShape()
+		if len(shape) != 3 {
+			return fmt.Errorf("diacritizer output %d has shape %v, want three dimensions", i, shape)
+		}
+		data, classes := tensor.GetData(), int(shape[2])
+		rows[i] = func(token int) []float32 { return data[token*classes : (token+1)*classes] }
 	}
 	nikudLogits, shinLogits, additionalLogits := rows[0], rows[1], rows[2]
 
-	// marks[i] follows runes[i] in the output, and only a single-rune token in the
-	// Hebrew alphabet ever gets one — so the emit below writes every rune exactly
-	// once and everything else passes through bare.
+	// marks[i] follows runes[i] in the output, and only a single-rune Hebrew token ever
+	// gets one — so the emit below writes every rune once and the rest passes through bare.
 	marks := make([]string, len(runes))
 	for i, t := range tokens {
-		if t.end-t.start != 1 {
+		if t.end-t.start != 1 || runes[t.start] < 'א' || runes[t.start] > 'ת' {
 			continue
 		}
 		char := runes[t.start]
-		if char < alef || char > tav {
-			continue
-		}
 
 		mark := nikudClasses[argmax(nikudLogits(i))]
 		if mark == matresLectionis {
@@ -266,24 +254,6 @@ func (d *Diacritizer) predict(b *strings.Builder, sentence string) error {
 		b.WriteString(marks[i])
 	}
 	return nil
-}
-
-// logits unwraps each [1, tokens, classes] tensor into a per-token row lookup.
-func logits(values []ort.Value) ([]func(token int) []float32, error) {
-	rows := make([]func(token int) []float32, len(values))
-	for i, value := range values {
-		tensor, ok := value.(*ort.Tensor[float32])
-		if !ok {
-			return nil, fmt.Errorf("diacritizer output %d is %T, want a float32 tensor", i, value)
-		}
-		shape := tensor.GetShape()
-		if len(shape) != 3 {
-			return nil, fmt.Errorf("diacritizer output %d has shape %v, want three dimensions", i, shape)
-		}
-		data, classes := tensor.GetData(), int(shape[2])
-		rows[i] = func(token int) []float32 { return data[token*classes : (token+1)*classes] }
-	}
-	return rows, nil
 }
 
 func argmax(row []float32) int { return slices.Index(row, slices.Max(row)) }

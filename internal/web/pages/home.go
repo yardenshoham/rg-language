@@ -21,7 +21,6 @@ var Examples = []string{
 	"אמא קנתה לי גלידה בשוק",
 }
 
-// Home renders the whole page. result is the zero value before anything is typed.
 func Home(analytics Analytics, text string, result pipeline.Result) g.Node {
 	return Layout(analytics, Title, "/",
 		html.P(html.Class("lead"),
@@ -46,9 +45,7 @@ func Home(analytics Analytics, text string, result pipeline.Result) g.Node {
 		),
 
 		html.P(html.Class("examples"), g.Text("לדוגמה: "),
-			g.Map(Examples, func(example string) g.Node {
-				return html.A(html.Href("/?text="+url.QueryEscape(example)), g.Text(example))
-			}),
+			g.Map(Examples, func(example string) g.Node { return linkTo("/?text="+url.QueryEscape(example), example) }),
 		),
 
 		html.Div(html.ID("result"), Result(result)),
@@ -79,7 +76,6 @@ func view(label, class, dir string, body g.Node) g.Node {
 	)
 }
 
-// mark tints an inserted or a stressed piece; inserted wins when a piece is both.
 func mark(text string, inserted, stressed bool) g.Node {
 	switch {
 	case inserted:

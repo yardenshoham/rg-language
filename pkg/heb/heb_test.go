@@ -1,6 +1,7 @@
 package heb_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/yardenshoham/rg-language/pkg/heb"
@@ -41,9 +42,7 @@ func TestSyllablesMarkInserted(t *testing.T) {
 		{Text: "lo", Stressed: true},
 		{Text: "rgom", Inserted: true},
 	}
-	for i, w := range want {
-		if words[0][i] != w {
-			t.Errorf("syllable %d = %+v, want %+v", i, words[0][i], w)
-		}
+	if !slices.Equal(words[0], want) {
+		t.Errorf("syllables = %+v, want %+v", words[0], want)
 	}
 }
