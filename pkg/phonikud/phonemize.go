@@ -1,9 +1,8 @@
 // Package phonikud converts vocalized Hebrew to IPA.
 //
-// A frozen fork of Python phonikud 0.4.1, deliberately not tracking upstream: the
-// snapshot keeps the differential corpus valid. Left out: the digit-and-date
-// expander (never tested end to end, so digits fall out of the stream) and the
-// unused fallback/hyper-phoneme hooks.
+// A frozen fork of Python phonikud 0.4.1: the snapshot keeps the differential corpus
+// valid. Left out: the digit-and-date expander (never tested end to end, so digits fall
+// out of the stream) and the unused fallback/hyper-phoneme hooks.
 package phonikud
 
 import "strings"
@@ -16,12 +15,9 @@ var modernSchema = strings.NewReplacer(
 	"g", "ɡ", // Gimel
 )
 
-// Phonemize converts vocalized Hebrew — niqqud plus the diacritizer's stress and
-// vocal-shva marks — into IPA with stress.
+// Phonemize converts vocalized Hebrew, niqqud plus phonikud's extra marks, into IPA with stress.
 func Phonemize(text string) string {
-	text = normalize(text)
-	text = hePattern.ReplaceAllStringFunc(text, phonemizeWord)
-	return postClean(text)
+	return postClean(hePattern.ReplaceAllStringFunc(normalize(text), phonemizeWord))
 }
 
 func phonemizeWord(word string) string {
@@ -35,23 +31,18 @@ func phonemizeWord(word string) string {
 }
 
 // postNormalize trims sounds Hebrew writes but modern speech drops word-finally.
-func postNormalize(phonemes string) string {
-	words := strings.Split(phonemes, " ")
-	for i, word := range words {
-		word = strings.TrimSuffix(word, "ʔ") // no glottal stop at the end
-		word = strings.TrimSuffix(word, "h") // no h at the end
-		// Not redundant: two final h's leave "ˈh", and this takes the stray stress (תהה).
-		word = strings.TrimSuffix(word, "ˈh")
-		if rest, ok := strings.CutSuffix(word, "ij"); ok {
-			word = rest + "i" // no j after an i
-		}
-		words[i] = word
+func postNormalize(word string) string {
+	word = strings.TrimSuffix(word, "ʔ") // no glottal stop at the end
+	word = strings.TrimSuffix(word, "h") // no h at the end
+	// Not redundant: two final h's leave "ˈh", and this takes the stray stress (תהה).
+	word = strings.TrimSuffix(word, "ˈh")
+	if rest, ok := strings.CutSuffix(word, "ij"); ok {
+		word = rest + "i" // no j after an i
 	}
-	return strings.Join(words, " ")
+	return word
 }
 
-// postClean drops everything that is not a phoneme — unsounded Hebrew letters,
-// digits, quotes — and turns a hyphen into a word break.
+// postClean drops everything that is not a phoneme and turns a hyphen into a break.
 func postClean(phonemes string) string {
 	var b strings.Builder
 	for _, r := range phonemes {

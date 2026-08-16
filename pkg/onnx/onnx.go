@@ -14,15 +14,11 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-const (
-	defaultLibraryPath = "/usr/local/lib/libonnxruntime.so" // where the image puts it
-	libraryPathEnv     = "ONNXRUNTIME_LIB"                  // override, for a local copy
-)
-
+// The default is where the image puts the library; the variable overrides it for a local copy.
 var initOnce = sync.OnceValue(func() error {
-	path := cmp.Or(os.Getenv(libraryPathEnv), defaultLibraryPath)
+	path := cmp.Or(os.Getenv("ONNXRUNTIME_LIB"), "/usr/local/lib/libonnxruntime.so")
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("ONNX Runtime shared library not found, set %s: %w", libraryPathEnv, err)
+		return fmt.Errorf("ONNX Runtime shared library not found, set ONNXRUNTIME_LIB: %w", err)
 	}
 	ort.SetSharedLibraryPath(path)
 	return ort.InitializeEnvironment()

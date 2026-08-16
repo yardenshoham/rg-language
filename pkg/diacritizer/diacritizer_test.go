@@ -1,6 +1,7 @@
 package diacritizer
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 // are the ones that break naive splitters.
 func TestChunks(t *testing.T) {
 	t.Parallel()
-	tests := []struct{ name, text string }{
+	for _, tt := range []struct{ name, text string }{
 		{"short", "שלום עולם"},
 		{"empty", ""},
 		{"exactly at the limit", strings.Repeat("ג", maxChunkRunes)},
@@ -22,8 +23,7 @@ func TestChunks(t *testing.T) {
 		{"trailing separator", strings.Repeat("ה", 3000) + "."},
 		{"separators only", strings.Repeat(".", 3000)},
 		{"mixed separators", strings.Repeat("ו. \nז", 700)},
-	}
-	for _, tt := range tests {
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := chunks(tt.text)
@@ -78,25 +78,16 @@ func TestTokenize(t *testing.T) {
 	d := &Diacritizer{vocab: map[string]int64{"ש": 234, "ל": 221, "ו": 214, "ם": 225},
 		unk: 0, cls: 1, sep: 2}
 
-	tokens := d.tokenize([]rune("שלום"))
-	if len(tokens) != 6 {
-		t.Fatalf("got %d tokens, want 4 letters plus the two special ones: %+v", len(tokens), tokens)
-	}
-	if tokens[0].id != d.cls || tokens[len(tokens)-1].id != d.sep {
-		t.Errorf("the sequence is not wrapped in [CLS] and [SEP]: %+v", tokens)
-	}
-	for i, want := range []int64{234, 221, 214, 225} {
-		if got := tokens[i+1]; got.id != want || got.start != i || got.end != i+1 {
-			t.Errorf("token %d = %+v, want id %d spanning rune %d", i+1, got, want, i)
-		}
+	// [CLS] and [SEP] wrap the sequence and span nothing.
+	want := []token{{d.cls, 0, 0}, {234, 0, 1}, {221, 1, 2}, {214, 2, 3}, {225, 3, 4}, {d.sep, 0, 0}}
+	if got := d.tokenize([]rune("שלום")); !slices.Equal(got, want) {
+		t.Errorf("tokenize(שלום) = %+v, want %+v", got, want)
 	}
 
-	tokens = d.tokenize([]rune("ש😀😀😀ל"))
-	if len(tokens) != 5 {
-		t.Fatalf("got %d tokens, want the emoji run collapsed into one: %+v", len(tokens), tokens)
-	}
-	if run := tokens[2]; run.id != d.unk || run.start != 1 || run.end != 4 {
-		t.Errorf("emoji run = %+v, want one unknown token spanning runes 1..4", run)
+	// The emoji run collapses into one unknown token spanning runes 1..4.
+	want = []token{{d.cls, 0, 0}, {234, 0, 1}, {d.unk, 1, 4}, {221, 4, 5}, {d.sep, 0, 0}}
+	if got := d.tokenize([]rune("ש😀😀😀ל")); !slices.Equal(got, want) {
+		t.Errorf("tokenize(ש😀😀😀ל) = %+v, want %+v", got, want)
 	}
 }
 

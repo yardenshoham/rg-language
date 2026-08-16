@@ -3,7 +3,6 @@ package voice
 import (
 	"encoding/binary"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/yardenshoham/rg-language/internal/corpustest"
@@ -106,26 +105,18 @@ func TestCheckpointSaysEverythingWeCanEmit(t *testing.T) {
 		t.Errorf("sample rate = %d, want 22050", v.sampleRate)
 	}
 
-	inventory := map[rune]bool{}
-	for _, item := range corpustest.Load(t, "../phonikud/testdata/corpus.jsonl") {
-		for _, r := range item.IPA + item.RG {
-			inventory[r] = true
-		}
-	}
 	// The tail is synthesized too, so it counts as part of the inventory.
-	for _, r := range tailPhonemes {
-		inventory[r] = true
+	inventory := []rune(tailPhonemes)
+	for _, item := range corpustest.Load(t, "../phonikud/testdata/corpus.jsonl") {
+		inventory = append(inventory, []rune(item.IPA+item.RG)...)
 	}
+	slices.Sort(inventory)
 
-	var missing []string
-	for r := range inventory {
-		if _, ok := v.ids[r]; !ok {
-			missing = append(missing, string(r))
-		}
-	}
-	slices.Sort(missing)
+	missing := slices.DeleteFunc(slices.Compact(inventory), func(r rune) bool {
+		_, ok := v.ids[r]
+		return ok
+	})
 	if len(missing) > 0 {
-		t.Errorf("the checkpoint cannot say %d symbol(s) the pipeline emits: %s",
-			len(missing), strings.Join(missing, " "))
+		t.Errorf("the checkpoint cannot say %d symbol(s) the pipeline emits: %q", len(missing), missing)
 	}
 }

@@ -22,7 +22,6 @@ import (
 //go:embed static
 var staticFiles embed.FS
 
-// maxInputRunes bounds what one request may ask the models to do.
 const maxInputRunes = 500
 
 // Config is the server's optional settings; the zero value is a complete site.
@@ -34,7 +33,6 @@ type Server struct {
 	pipeline *pipeline.Pipeline
 }
 
-// NewServer runs after the models load, so every handler here has both resident.
 func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server {
 	s := &Server{logger: logger, pipeline: p}
 	mux := http.NewServeMux()
@@ -48,10 +46,8 @@ func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server
 	})
 	mux.HandleFunc("GET /{$}", s.transformed("home page",
 		func(text string, result pipeline.Result) g.Node { return pages.Home(config, text, result) }))
-	// The fragment is body content, so it carries no layout and no analytics.
 	mux.HandleFunc("GET /transform", s.transformed("result fragment",
 		func(_ string, result pipeline.Result) g.Node { return pages.Result(result) }))
-	// A ServeMux wildcard spans a whole segment, so .wav comes off in the handler.
 	mux.HandleFunc("GET /audio/{name}", s.handleAudio)
 	mux.HandleFunc("GET /about", func(w http.ResponseWriter, _ *http.Request) { s.render(w, "about page", pages.About(config)) })
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") })
@@ -60,7 +56,6 @@ func NewServer(logger *slog.Logger, p *pipeline.Pipeline, config Config) *Server
 	return s
 }
 
-// ListenAndServe blocks until ctx is cancelled, then shuts down gracefully.
 func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	srv := &http.Server{Addr: addr, Handler: s, ReadHeaderTimeout: 10 * time.Second}
 
@@ -103,14 +98,11 @@ func (s *Server) transformed(what string, page func(string, pipeline.Result) g.N
 			w.Header().Set("HX-Replace-Url", shareable)
 		}
 
-		var result pipeline.Result
-		if text != "" {
-			var err error
-			if result, err = s.pipeline.Transform(r.Context(), text); err != nil {
-				s.logger.Error("transforming", "error", err)
-				http.Error(w, "לא הצלחנו לתרגם את זה", http.StatusInternalServerError)
-				return
-			}
+		result, err := s.pipeline.Transform(r.Context(), text)
+		if err != nil {
+			s.logger.Error("transforming", "error", err)
+			http.Error(w, "לא הצלחנו לתרגם את זה", http.StatusInternalServerError)
+			return
 		}
 		s.render(w, what, page(text, result))
 	}
@@ -128,17 +120,15 @@ func (s *Server) handleAudio(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, pipeline.ErrUnknownAudio):
 		s.logger.Info("audio not found", "hash", hash)
 		http.Error(w, "אין הקלטה כזאת", http.StatusNotFound)
-		return
 	case err != nil:
-		// Synthesis failed, which is ours to answer for, not the caller's.
 		s.logger.Error("synthesizing audio", "hash", hash, "error", err)
 		http.Error(w, "לא הצלחנו להקליט את זה", http.StatusInternalServerError)
-		return
+	default:
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		// ServeContent, not Write: Safari probes with Range before playing, and seeking needs it.
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(wav))
 	}
-	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	// ServeContent, not Write: Safari probes with Range before playing, and seeking needs it.
-	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(wav))
 }
 
 // instrument logs every request; recovery runs before the log line so the log reports the 500.

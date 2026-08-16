@@ -27,18 +27,14 @@ func About(analytics Analytics) g.Node {
 
 		html.H2(g.Text("קרדיטים")),
 		html.Ul(
-			credit("https://github.com/thewh1teagle/phonikud", "phonikud", " — ניקוד אוטומטי והמרה לצלילים."),
-			credit("https://github.com/shivammehta25/Matcha-TTS", "Matcha-TTS", " — סינתזת הדיבור."),
-			credit("https://fonts.google.com/noto/specimen/Noto+Sans+Hebrew", "Noto Sans Hebrew",
-				" — הגופן, כי ניקוד צריך גופן שיודע להציב אותו."),
-			html.Li(html.A(html.Href("https://www.gomponents.com"), g.Text("gomponents")), g.Text(" ו־"),
-				html.A(html.Href("https://htmx.org"), g.Text("htmx")), g.Text(" — הדפים.")),
+			html.Li(linkTo("https://github.com/thewh1teagle/phonikud", "phonikud"), g.Text(" — ניקוד אוטומטי והמרה לצלילים.")),
+			html.Li(linkTo("https://github.com/shivammehta25/Matcha-TTS", "Matcha-TTS"), g.Text(" — סינתזת הדיבור.")),
+			html.Li(linkTo("https://fonts.google.com/noto/specimen/Noto+Sans+Hebrew", "Noto Sans Hebrew"),
+				g.Text(" — הגופן, כי ניקוד צריך גופן שיודע להציב אותו.")),
+			html.Li(linkTo("https://www.gomponents.com", "gomponents"), g.Text(" ו־"), linkTo("https://htmx.org", "htmx"), g.Text(" — הדפים.")),
 		),
-		html.P(html.A(html.Href("https://github.com/yardenshoham/rg-language"),
-			g.Text("github.com/yardenshoham/rg-language"))),
+		html.P(linkTo("https://github.com/yardenshoham/rg-language", "github.com/yardenshoham/rg-language")),
 	)
 }
 
-func credit(href, name, rest string) g.Node {
-	return html.Li(html.A(html.Href(href), g.Text(name)), g.Text(rest))
-}
+func linkTo(href, text string) g.Node { return html.A(html.Href(href), g.Text(text)) }

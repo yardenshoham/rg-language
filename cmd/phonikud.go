@@ -28,7 +28,6 @@ func newRow(vocalized, ipa, rgIPA string) row {
 	return row{Vocalized: vocalized, IPA: ipa, RG: rgIPA, HebRG: heb.RG(vocalized), Latin: heb.Latin(rgIPA), Doubled: pipeline.DoubledVowel(ipa)}
 }
 
-// write prints the block both `phonikud` and `say` show.
 func (r row) write(w io.Writer) {
 	fmt.Fprintf(w, "niqqud     %s\nipa        %s\nrg ipa     %s\nrg         %s\nrg niqqud  %s\nrg latin   %s\n",
 		r.Vocalized, r.IPA, r.RG, heb.StripMarks(r.HebRG), r.HebRG, r.Latin)
@@ -40,9 +39,8 @@ func (r row) write(w io.Writer) {
 // newPhonikudCmd needs no model and no ONNX Runtime: the quick way to check a rule.
 func newPhonikudCmd() *cobra.Command {
 	var (
-		asJSON      bool
-		stressMode  string
-		noNormalize bool
+		asJSON, noNormalize bool
+		stressMode          string
 	)
 
 	cmd := &cobra.Command{

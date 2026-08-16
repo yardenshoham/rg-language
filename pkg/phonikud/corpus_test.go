@@ -19,22 +19,19 @@ func TestCorpus(t *testing.T) {
 	t.Parallel()
 	items := corpustest.Load(t, corpusPath)
 
-	stages := []struct {
-		name  string
-		check func(item) (got, want string)
-	}{
-		{"phonemize", func(i item) (string, string) { return phonikud.Phonemize(i.Vocalized), i.IPA }},
-		{"transform", func(i item) (string, string) { return rg.Transform(i.IPA, rg.StressFirst), i.RG }},
-		{"hebrew", func(i item) (string, string) { return heb.RG(i.Vocalized), i.HebRG }},
-		{"latin", func(i item) (string, string) { return heb.Latin(i.RG), i.Latin }},
+	stages := map[string]func(item) (got, want string){
+		"phonemize": func(i item) (string, string) { return phonikud.Phonemize(i.Vocalized), i.IPA },
+		"transform": func(i item) (string, string) { return rg.Transform(i.IPA, rg.StressFirst), i.RG },
+		"hebrew":    func(i item) (string, string) { return heb.RG(i.Vocalized), i.HebRG },
+		"latin":     func(i item) (string, string) { return heb.Latin(i.RG), i.Latin },
 	}
 
-	for _, stage := range stages {
-		t.Run(stage.name, func(t *testing.T) {
+	for name, check := range stages {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			mismatches := 0
 			for _, item := range items {
-				got, want := stage.check(item)
+				got, want := check(item)
 				if got == want {
 					continue
 				}
@@ -55,9 +52,7 @@ func TestCorpus(t *testing.T) {
 // output, and these fire on words the diacritizer left bare.
 func TestPhonemizeTrimsWordEndings(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name, in, want string
-	}{
+	for _, tt := range []struct{ name, in, want string }{
 		// Two h's: the first trim leaves "ˈh" and the second takes the stray stress with it.
 		{"double he", "זהה", "z"},
 		{"double he, taf", "תהה", "t"},
@@ -71,8 +66,7 @@ func TestPhonemizeTrimsWordEndings(t *testing.T) {
 		{"vocalized he", "מָה", "mˈa"},
 		// The glottal stop goes too.
 		{"final alef", "מָא", "mˈa"},
-	}
-	for _, tt := range tests {
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := phonikud.Phonemize(tt.in); got != tt.want {

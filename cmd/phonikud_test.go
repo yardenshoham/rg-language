@@ -7,7 +7,8 @@ import (
 	"testing"
 )
 
-func run(t *testing.T, stdin string, args ...string) string {
+// run fails if the command errors or the output is missing any want.
+func run(t *testing.T, stdin string, args []string, want ...string) string {
 	t.Helper()
 	var out bytes.Buffer
 	root := newRootCmd()
@@ -18,29 +19,29 @@ func run(t *testing.T, stdin string, args ...string) string {
 	if err := root.ExecuteContext(t.Context()); err != nil {
 		t.Fatalf("%v: %v\n%s", args, err, out.String())
 	}
+	for _, w := range want {
+		if !strings.Contains(out.String(), w) {
+			t.Errorf("%v: output is missing %q:\n%s", args, w, out.String())
+		}
+	}
 	return out.String()
 }
 
 func TestPhonikudText(t *testing.T) {
 	t.Parallel()
-	got := run(t, "", "phonikud", "שָׁלוֹם")
-	for _, want := range []string{
+	run(t, "", []string{"phonikud", "שָׁלוֹם"},
 		"ipa        ʃalˈom",
 		"rg ipa     ʃaʁɡalˈoʁɡom",
 		"rg         שרגלורגום",
 		"rg niqqud  שָׁרְגָלוֹרְגוֹם",
 		"rg latin   sha-rga-lo-rgom",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output is missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 // The JSON field names match the differential corpus so the two can be diffed.
 func TestPhonikudJSONReadsStdin(t *testing.T) {
 	t.Parallel()
-	out := run(t, "גַּנָּן\n\nנֶחְמָד\n", "phonikud", "--json")
+	out := run(t, "גַּנָּן\n\nנֶחְמָד\n", []string{"phonikud", "--json"})
 
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 2 {
@@ -67,18 +68,14 @@ func TestPhonikudJSONReadsStdin(t *testing.T) {
 
 func TestPhonikudStressModes(t *testing.T) {
 	t.Parallel()
-	tests := []struct{ mode, want string }{
+	for _, tt := range []struct{ mode, want string }{
 		{"first", "ʃaʁɡalˈoʁɡom"},
 		{"second", "ʃaʁɡaloʁɡˈom"},
 		{"both", "ʃaʁɡalˈoʁɡˈom"},
-	}
-	for _, tt := range tests {
+	} {
 		t.Run(tt.mode, func(t *testing.T) {
 			t.Parallel()
-			got := run(t, "", "phonikud", "--stress", tt.mode, "שָׁלוֹם")
-			if !strings.Contains(got, tt.want) {
-				t.Errorf("--stress %s did not produce %q:\n%s", tt.mode, tt.want, got)
-			}
+			run(t, "", []string{"phonikud", "--stress", tt.mode, "שָׁלוֹם"}, tt.want)
 		})
 	}
 }
@@ -99,10 +96,6 @@ func TestPhonikudRejectsUnknownStress(t *testing.T) {
 // Unpinned it has no vowels at all, which --raw shows.
 func TestPhonikudRawSkipsLexicon(t *testing.T) {
 	t.Parallel()
-	if got := run(t, "", "phonikud", "חכמה"); !strings.Contains(got, "ipa        χoχmˈa") {
-		t.Errorf("the lexicon did not pin חכמה:\n%s", got)
-	}
-	if got := run(t, "", "phonikud", "--raw", "חכמה"); !strings.Contains(got, "ipa        χˈχm") {
-		t.Errorf("--raw still applied the lexicon:\n%s", got)
-	}
+	run(t, "", []string{"phonikud", "חכמה"}, "ipa        χoχmˈa")
+	run(t, "", []string{"phonikud", "--raw", "חכמה"}, "ipa        χˈχm")
 }

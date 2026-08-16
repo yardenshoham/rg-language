@@ -18,10 +18,9 @@ import (
 
 func newWebCmd() *cobra.Command {
 	var (
-		addr         string
-		modelsDir    string
-		audioCacheMB int
-		config       web.Config
+		addr, modelsDir string
+		audioCacheMB    int
+		config          web.Config
 	)
 
 	cmd := &cobra.Command{
@@ -38,11 +37,10 @@ func newWebCmd() *cobra.Command {
 
 			// Not a flag default: a set-but-unusable value should be reported.
 			if !cmd.Flags().Changed("audio-cache-mb") {
-				mb, err := strconv.Atoi(cmp.Or(os.Getenv("RG_AUDIO_CACHE_MB"), "0"))
-				if err != nil {
+				var err error
+				if audioCacheMB, err = strconv.Atoi(cmp.Or(os.Getenv("RG_AUDIO_CACHE_MB"), "0")); err != nil {
 					return fmt.Errorf("invalid RG_AUDIO_CACHE_MB: %w", err)
 				}
-				audioCacheMB = max(mb, 0)
 			}
 
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
