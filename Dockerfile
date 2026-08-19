@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.27-bookworm AS builder
 
 # BuildKit fetches these and fails on a digest mismatch. The pins are deliberate: a
 # silently substituted checkpoint would invalidate the blind listening test the voice
