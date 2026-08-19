@@ -4,7 +4,7 @@ go 1.26.6
 
 require (
 	github.com/spf13/cobra v1.10.2
-	github.com/yalue/onnxruntime_go v1.33.0
+	github.com/yalue/onnxruntime_go v1.34.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/text v0.41.0
 	maragu.dev/gomponents v1.3.0
