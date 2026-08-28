@@ -31,8 +31,11 @@ func Home(analytics Analytics, text string, result pipeline.Result) g.Node {
 
 		html.Form(html.Method("get"), html.Action("/"),
 			// Typing updates live; the button navigates, making a shareable URL.
+			// No `changed` modifier: htmx 4 reads it off the element the listener is on
+			// — the form, which has no value — so it would never fire. `input` already
+			// only fires on a real change.
 			htmx.Get("/transform"),
-			htmx.Trigger("input changed delay:500ms"),
+			htmx.Trigger("input delay:500ms"),
 			htmx.Target("#result"),
 			htmx.Indicator("#result"),
 			html.Textarea(
