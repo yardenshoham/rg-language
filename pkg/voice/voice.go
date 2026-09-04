@@ -127,7 +127,7 @@ func (v *Voice) Synth(ipa string) ([]byte, error) {
 	defer onnx.Destroy(inputs...)
 
 	outputs := []ort.Value{nil, nil}
-	if err := v.session.Run(inputs, outputs); err != nil {
+	if err := onnx.Run(v.session, inputs, outputs); err != nil {
 		return nil, fmt.Errorf("running voice: %w", err)
 	}
 	defer onnx.Destroy(outputs...)
