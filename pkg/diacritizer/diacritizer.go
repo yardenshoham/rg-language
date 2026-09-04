@@ -196,7 +196,7 @@ func (d *Diacritizer) predict(b *strings.Builder, sentence string) error {
 	}
 
 	outputs := []ort.Value{nil, nil, nil}
-	if err := d.session.Run(inputs, outputs); err != nil {
+	if err := onnx.Run(d.session, inputs, outputs); err != nil {
 		return fmt.Errorf("running diacritizer: %w", err)
 	}
 	defer onnx.Destroy(outputs...)

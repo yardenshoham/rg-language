@@ -48,6 +48,31 @@ func Session(ctx context.Context, modelPath string, inputs, outputs []string) (*
 	return ort.NewDynamicAdvancedSession(modelPath, inputs, outputs, options)
 }
 
+// runOptions asks the CPU arena to give back what a run grew it by. Without this the
+// arena keeps its high-water mark forever: one 500-rune synthesis takes the process from
+// about 530 MB resident to about 2 GB and it stays there, which on Railway's per-minute
+// RAM billing was most of the bill. Measured over the same run, 626 MB and no slower.
+var runOptions = sync.OnceValues(func() (*ort.RunOptions, error) {
+	options, err := ort.NewRunOptions()
+	if err != nil {
+		return nil, fmt.Errorf("creating run options: %w", err)
+	}
+	if err := options.AddRunConfigEntry("memory.enable_memory_arena_shrinkage", "cpu:0"); err != nil {
+		_ = options.Destroy()
+		return nil, fmt.Errorf("enabling arena shrinkage: %w", err)
+	}
+	return options, nil
+})
+
+// Run is session.Run with the shared run options; outputs are allocated by the runtime.
+func Run(session *ort.DynamicAdvancedSession, inputs, outputs []ort.Value) error {
+	options, err := runOptions()
+	if err != nil {
+		return err
+	}
+	return session.RunWithOptions(inputs, outputs, options)
+}
+
 // Destroy frees tensors' C memory; said once here, a failed free is not actionable.
 func Destroy(values ...ort.Value) {
 	for _, value := range values {
