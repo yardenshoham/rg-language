@@ -1,6 +1,6 @@
 # Local development. The container builds everything itself; see Dockerfile.
 ORT_VERSION ?= 1.29.0
-VOICE_REVISION ?= dcca83dc0911c898fbe4bba464fa450a98c4e7a0
+VOICE_RELEASE ?= voice-matcha-he-en-dcca83d
 DIACRITIZER_REVISION ?= b806189fe1fc0085b1012b7560ffb5e8ecfd72a2
 
 DEBUG := debug
@@ -18,7 +18,7 @@ models: $(MODELS)/matcha-he-en.onnx $(MODELS)/phonikud-1.0.onnx
 
 $(MODELS)/matcha-he-en.onnx:
 	@mkdir -p $(MODELS)
-	curl -fsSL -o $@ "https://huggingface.co/thewh1teagle/matcha-tts/resolve/$(VOICE_REVISION)/matcha-he-en.onnx"
+	curl -fsSL -o $@ "https://github.com/yardenshoham/rg-language/releases/download/$(VOICE_RELEASE)/matcha-he-en.onnx"
 	echo "2489ccaf7a2a8cba57011b56f7479a407ad6c21e7a93eddcf62e4788f5eeae4b  $@" | sha256sum -c -
 
 $(MODELS)/phonikud-1.0.onnx:
