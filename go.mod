@@ -7,7 +7,7 @@ require (
 	github.com/yalue/onnxruntime_go v1.36.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/text v0.42.0
-	maragu.dev/gomponents v1.3.0
+	maragu.dev/gomponents v1.4.0
 	maragu.dev/gomponents-htmx v0.6.1
 )
 
